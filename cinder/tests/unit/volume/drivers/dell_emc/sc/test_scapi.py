@@ -683,15 +683,15 @@ class DellSCSanAPITestCase(test.TestCase):
                     u'readOnly': False,
                     u'lun': 1,
                     u'serverHba': {u'instanceId': u'64702.3282218607',
-                                   u'instanceName': u'21000024FF30441C',
+                                   u'instanceName': u'21000024ff30441c',
                                    u'objectType': u'ScServerHba'},
                     u'path': {u'instanceId': u'64702.64702.64703.27.73',
                               u'instanceName':
-                                  u'21000024FF30441C-5000D31000FCBE36',
+                                  u'21000024ff30441c-5000d31000fcbe36',
                               u'objectType': u'ScServerHbaPath'},
                     u'controllerPort':
                         {u'instanceId': u'64702.5764839588723736118.50',
-                         u'instanceName': u'5000D31000FCBE36',
+                         u'instanceName': u'5000d31000fcbe36',
                          u'objectType': u'ScControllerPort'},
                     u'instanceName': u'64702-7639',
                     u'transport': u'FibreChannel',
@@ -717,15 +717,15 @@ class DellSCSanAPITestCase(test.TestCase):
                     u'readOnly': False,
                     u'lun': 1,
                     u'serverHba': {u'instanceId': u'64702.3282218606',
-                                   u'instanceName': u'21000024FF30441D',
+                                   u'instanceName': u'21000024ff30441d',
                                    u'objectType': u'ScServerHba'},
                     u'path':
                     {u'instanceId': u'64702.64702.64703.27.78',
-                       u'instanceName': u'21000024FF30441D-5000D31000FCBE36',
+                       u'instanceName': u'21000024ff30441d-5000d31000fcbe36',
                        u'objectType': u'ScServerHbaPath'},
                     u'controllerPort':
                         {u'instanceId': u'64702.5764839588723736118.50',
-                         u'instanceName': u'5000D31000FCBE36',
+                         u'instanceName': u'5000d31000fcbe36',
                          u'objectType': u'ScControllerPort'},
                     u'instanceName': u'64702-7640',
                     u'transport': u'FibreChannel',
@@ -751,11 +751,11 @@ class DellSCSanAPITestCase(test.TestCase):
                     u'readOnly': False,
                     u'lun': 1,
                     u'serverHba': {u'instanceId': u'64702.3282218606',
-                                   u'instanceName': u'21000024FF30441D',
+                                   u'instanceName': u'21000024ff30441d',
                                    u'objectType': u'ScServerHba'},
                     u'path':
                         {u'instanceId': u'64702.64702.64703.28.76',
-                         u'instanceName': u'21000024FF30441D-5000D31000FCBE3E',
+                         u'instanceName': u'21000024ff30441d-5000D31000FCBE3E',
                          u'objectType': u'ScServerHbaPath'},
                     u'controllerPort': {u'instanceId':
                                         u'64702.5764839588723736126.60',
@@ -787,15 +787,15 @@ class DellSCSanAPITestCase(test.TestCase):
           u'readOnly': False,
           u'lun': 1,
           u'serverHba': {u'instanceId': u'64702.3282218607',
-                         u'instanceName': u'21000024FF30441C',
+                         u'instanceName': u'21000024ff30441c',
                          u'objectType': u'ScServerHba'},
           u'path': {u'instanceId': u'64702.64702.64703.27.73',
                     u'instanceName':
-                    u'21000024FF30441C-5000D31000FCBE36',
+                    u'21000024ff30441c-5000d31000fcbe36',
                     u'objectType': u'ScServerHbaPath'},
           u'controllerPort':
           {u'instanceId': u'64702.5764839588723736118.50',
-           u'instanceName': u'5000D31000FCBE36',
+           u'instanceName': u'5000d31000fcbe36',
            u'objectType': u'ScControllerPort'},
           u'instanceName': u'64702-7639',
           u'transport': u'FibreChannel',
@@ -821,15 +821,15 @@ class DellSCSanAPITestCase(test.TestCase):
           u'readOnly': False,
           u'lun': 1,
           u'serverHba': {u'instanceId': u'64702.3282218606',
-                         u'instanceName': u'21000024FF30441D',
+                         u'instanceName': u'21000024ff30441d',
                          u'objectType': u'ScServerHba'},
           u'path':
           {u'instanceId': u'64702.64702.64703.27.78',
-           u'instanceName': u'21000024FF30441D-5000D31000FCBE36',
+           u'instanceName': u'21000024ff30441d-5000d31000fcbe36',
            u'objectType': u'ScServerHbaPath'},
           u'controllerPort':
           {u'instanceId': u'64702.5764839588723736118.50',
-           u'instanceName': u'5000D31000FCBE36',
+           u'instanceName': u'5000d31000fcbe36',
            u'objectType': u'ScControllerPort'},
           u'instanceName': u'64702-7640',
           u'transport': u'FibreChannel',
@@ -855,11 +855,11 @@ class DellSCSanAPITestCase(test.TestCase):
              u'readOnly': False,
              u'lun': 2,
              u'serverHba': {u'instanceId': u'64702.3282218606',
-                            u'instanceName': u'21000024FF30441D',
+                            u'instanceName': u'21000024ff30441d',
                             u'objectType': u'ScServerHba'},
              u'path':
                         {u'instanceId': u'64702.64702.64703.28.76',
-                         u'instanceName': u'21000024FF30441D-5000D31000FCBE3E',
+                         u'instanceName': u'21000024ff30441d-5000D31000FCBE3E',
                          u'objectType': u'ScServerHbaPath'},
              u'controllerPort': {u'instanceId':
                                  u'64702.5764839588723736126.60',
@@ -1027,7 +1027,7 @@ class DellSCSanAPITestCase(test.TestCase):
     FC_HBAS = [{u'portWwnList': [],
                 u'iscsiIpAddress': u'0.0.0.0',
                 u'pathCount': 2,
-                u'name': u'21000024FF30441C',
+                u'name': u'21000024ff30441c',
                 u'connectivity': u'Up',
                 u'instanceId': u'64702.3282218607',
                 u'scName': u'Storage Center 64702',
@@ -1039,12 +1039,12 @@ class DellSCSanAPITestCase(test.TestCase):
                 u'remoteStorageCenter': False,
                 u'iscsiName': u'',
                 u'portType': u'FibreChannel',
-                u'instanceName': u'21000024FF30441C',
+                u'instanceName': u'21000024ff30441c',
                 u'objectType': u'ScServerHba'},
                {u'portWwnList': [],
                 u'iscsiIpAddress': u'0.0.0.0',
                 u'pathCount': 3,
-                u'name': u'21000024FF30441D',
+                u'name': u'21000024ff30441d',
                 u'connectivity': u'Partial',
                 u'instanceId': u'64702.3282218606',
                 u'scName': u'Storage Center 64702',
@@ -1056,13 +1056,13 @@ class DellSCSanAPITestCase(test.TestCase):
                 u'remoteStorageCenter': False,
                 u'iscsiName': u'',
                 u'portType': u'FibreChannel',
-                u'instanceName': u'21000024FF30441D',
+                u'instanceName': u'21000024ff30441d',
                 u'objectType': u'ScServerHba'}]
 
     FC_HBA = {u'portWwnList': [],
               u'iscsiIpAddress': u'0.0.0.0',
               u'pathCount': 3,
-              u'name': u'21000024FF30441D',
+              u'name': u'21000024ff30441d',
               u'connectivity': u'Partial',
               u'instanceId': u'64702.3282218606',
               u'scName': u'Storage Center 64702',
@@ -1074,7 +1074,7 @@ class DellSCSanAPITestCase(test.TestCase):
               u'remoteStorageCenter': False,
               u'iscsiName': u'',
               u'portType': u'FibreChannel',
-              u'instanceName': u'21000024FF30441D',
+              u'instanceName': u'21000024ff30441d',
               u'objectType': u'ScServerHba'}
 
     SVR_OS_S = [{u'allowsLunGaps': True,
@@ -1289,8 +1289,8 @@ class DellSCSanAPITestCase(test.TestCase):
                                           u'objectType': u'ScControllerPort'},
                      u'status': u'Up',
                      u'iscsiIpAddress': u'0.0.0.0',
-                     u'WWN': u'5000D31000FCBE36',
-                     u'name': u'5000D31000FCBE36',
+                     u'WWN': u'5000d31000fcbe36',
+                     u'name': u'5000d31000fcbe36',
                      u'parent':
                          {u'instanceId': u'64702.5764839588723736093.57',
                              u'instanceName': u'5000D31000FCBE1D',
@@ -1311,7 +1311,7 @@ class DellSCSanAPITestCase(test.TestCase):
                          {u'instanceId': u'64702.1.0',
                           u'instanceName': u'Domain 0',
                           u'objectType': u'ScControllerPortFaultDomain'},
-                     u'instanceName': u'5000D31000FCBE36',
+                     u'instanceName': u'5000d31000fcbe36',
                      u'childStatus': u'Up',
                      u'statusMessage': u'',
                      u'objectType': u'ScControllerPort'}
@@ -1323,8 +1323,8 @@ class DellSCSanAPITestCase(test.TestCase):
           u'objectType': u'ScControllerPort'},
          u'status': u'Up',
          u'iscsiIpAddress': u'0.0.0.0',
-         u'wWN': u'5000D31000FCBE36',
-         u'name': u'5000D31000FCBE36',
+         u'wWN': u'5000d31000fcbe36',
+         u'name': u'5000d31000fcbe36',
          u'parent':
          {u'instanceId': u'64702.5764839588723736093.57',
           u'instanceName': u'5000D31000FCBE1D',
@@ -1345,7 +1345,7 @@ class DellSCSanAPITestCase(test.TestCase):
          {u'instanceId': u'64702.1.0',
           u'instanceName': u'Domain 0',
           u'objectType': u'ScControllerPortFaultDomain'},
-         u'instanceName': u'5000D31000FCBE36',
+         u'instanceName': u'5000d31000fcbe36',
          u'childStatus': u'Up',
          u'statusMessage': u'',
          u'objectType': u'ScControllerPort'}
@@ -1603,10 +1603,10 @@ class DellSCSanAPITestCase(test.TestCase):
                                              u'objectType': u'StorageCenter'}}]
 
     IQN = 'iqn.2002-03.com.compellent:5000D31000000001'
-    WWN = u'21000024FF30441C'
+    WWN = u'21000024ff30441c'
 
-    WWNS = [u'21000024FF30441C',
-            u'21000024FF30441D']
+    WWNS = [u'21000024ff30441c',
+            u'21000024ff30441d']
 
     # Used to test finding no match in find_wwns
     WWNS_NO_MATCH = [u'21000024FF30451C',
@@ -3442,9 +3442,9 @@ class DellSCSanAPITestCase(test.TestCase):
 
         # The _find_controller_port is Mocked, so all mapping pairs
         # will have the same WWN for the ScControllerPort
-        itmapCompare = {u'21000024FF30441C': [u'5000D31000FCBE36'],
-                        u'21000024FF30441D':
-                        [u'5000D31000FCBE36', u'5000D31000FCBE36']}
+        itmapCompare = {u'21000024ff30441c': [u'5000d31000fcbe36'],
+                        u'21000024ff30441d':
+                        [u'5000d31000fcbe36', u'5000d31000fcbe36']}
         self.assertEqual(1, lun, 'Incorrect LUN')
         self.assertIsNotNone(wwns, 'WWNs is None')
         self.assertEqual(itmapCompare, itmap, 'WWN mapping incorrect')
@@ -3521,12 +3521,12 @@ class DellSCSanAPITestCase(test.TestCase):
         self.assertTrue(mock_find_controller_port.called)
 
         self.assertEqual(1, lun, 'Incorrect LUN')
-        expected_wwn = ['5000D31000FCBE36', '5000D31000FCBE36',
-                        '5000D31000FCBE36']
+        expected_wwn = ['5000d31000fcbe36', '5000d31000fcbe36',
+                        '5000d31000fcbe36']
         self.assertEqual(expected_wwn, wwns, 'WWNs incorrect')
-        expected_itmap = {'21000024FF30441C': ['5000D31000FCBE36'],
-                          '21000024FF30441D': ['5000D31000FCBE36',
-                                               '5000D31000FCBE36']}
+        expected_itmap = {'21000024ff30441c': ['5000d31000fcbe36'],
+                          '21000024ff30441d': ['5000d31000fcbe36',
+                                               '5000d31000fcbe36']}
         self.assertEqual(expected_itmap, itmap, 'WWN mapping incorrect')
 
     @mock.patch.object(storagecenter_api.SCApi,
@@ -3580,9 +3580,9 @@ class DellSCSanAPITestCase(test.TestCase):
         self.assertTrue(mock_find_controller_port.called)
         # The _find_controller_port is Mocked, so all mapping pairs
         # will have the same WWN for the ScControllerPort
-        itmapCompare = {u'21000024FF30441C': [u'5000D31000FCBE36'],
-                        u'21000024FF30441D':
-                        [u'5000D31000FCBE36', u'5000D31000FCBE36']}
+        itmapCompare = {u'21000024ff30441c': [u'5000d31000fcbe36'],
+                        u'21000024ff30441d':
+                        [u'5000d31000fcbe36', u'5000d31000fcbe36']}
         self.assertEqual(1, lun, 'Incorrect LUN')
         self.assertIsNotNone(wwns, 'WWNs is None')
         self.assertEqual(itmapCompare, itmap, 'WWN mapping incorrect')
@@ -3641,7 +3641,50 @@ class DellSCSanAPITestCase(test.TestCase):
                                             mock_close_connection,
                                             mock_open_connection,
                                             mock_init):
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        scserver = {'instanceId': '64702.30'}
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
+        self.assertTrue(mock_is_virtualport_mode.called)
+        self.assertTrue(mock_find_mappings.called)
+        self.assertTrue(mock_find_domains.called)
+        self.assertTrue(mock_find_ctrl_port.called)
+        self.assertTrue(mock_find_active_controller.called)
+        expected = {'target_discovered': False,
+                    'target_iqn':
+                        u'iqn.2002-03.com.compellent:5000d31000fcbe43',
+                    'target_iqns':
+                        [u'iqn.2002-03.com.compellent:5000d31000fcbe43'],
+                    'target_lun': 1,
+                    'target_luns': [1],
+                    'target_portal': u'192.168.0.21:3260',
+                    'target_portals': [u'192.168.0.21:3260']}
+        self.assertEqual(expected, res, 'Wrong Target Info')
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       '_find_active_controller',
+                       return_value='64702.5764839588723736131.91')
+    @mock.patch.object(storagecenter_api.SCApi,
+                       '_find_controller_port',
+                       return_value=ISCSI_CTRLR_PORT)
+    @mock.patch.object(storagecenter_api.SCApi,
+                       '_find_domains',
+                       return_value=ISCSI_FLT_DOMAINS)
+    @mock.patch.object(storagecenter_api.SCApi,
+                       '_find_mappings',
+                       return_value=MAPPINGS)
+    @mock.patch.object(storagecenter_api.SCApi,
+                       '_is_virtualport_mode',
+                       return_value=True)
+    def test_find_iscsi_properties_multiple_servers_mapped(
+            self, mock_is_virtualport_mode, mock_find_mappings,
+            mock_find_domains, mock_find_ctrl_port,
+            mock_find_active_controller, mock_close_connection,
+            mock_open_connection, mock_init):
+        mappings = [{'instanceId': '64702.970.64702',
+                     'server': {'instanceId': '64702.47'},
+                     'volume': {'instanceId': '64702.92'}}]
+        mappings.append(self.MAPPINGS[0].copy())
+        scserver = {'instanceId': '64702.30'}
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_domains.called)
@@ -3666,10 +3709,12 @@ class DellSCSanAPITestCase(test.TestCase):
                                               mock_close_connection,
                                               mock_open_connection,
                                               mock_init):
+        scserver = {'instanceId': '64702.30'}
         # Test case where there are no ScMapping(s)
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.scapi.find_iscsi_properties,
-                          self.VOLUME)
+                          self.VOLUME,
+                          scserver)
         self.assertTrue(mock_find_mappings.called)
 
     @mock.patch.object(storagecenter_api.SCApi,
@@ -3696,10 +3741,11 @@ class DellSCSanAPITestCase(test.TestCase):
                                              mock_close_connection,
                                              mock_open_connection,
                                              mock_init):
+        scserver = {'instanceId': '64702.30'}
         # Test case where there are no ScFaultDomain(s)
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.scapi.find_iscsi_properties,
-                          self.VOLUME)
+                          self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_domains.called)
@@ -3726,10 +3772,11 @@ class DellSCSanAPITestCase(test.TestCase):
                                                 mock_close_connection,
                                                 mock_open_connection,
                                                 mock_init):
+        scserver = {'instanceId': '64702.30'}
         # Test case where there are no ScFaultDomain(s)
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.scapi.find_iscsi_properties,
-                          self.VOLUME)
+                          self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -3759,8 +3806,9 @@ class DellSCSanAPITestCase(test.TestCase):
                                       mock_close_connection,
                                       mock_open_connection,
                                       mock_init):
+        scserver = {'instanceId': '64702.30'}
         # Test case where Read Only mappings are found
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_domains.called)
@@ -3804,7 +3852,8 @@ class DellSCSanAPITestCase(test.TestCase):
         mock_find_ctrl_port.side_effect = [
             {'iscsiName': 'iqn.2002-03.com.compellent:5000d31000fcbe43'},
             {'iscsiName': 'iqn.2002-03.com.compellent:5000d31000fcbe44'}]
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        scserver = {'instanceId': '64702.30'}
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_domains.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -3854,7 +3903,8 @@ class DellSCSanAPITestCase(test.TestCase):
         # Test case where there are multiple portals and
         mock_find_ctrl_port.return_value = {
             'iscsiName': 'iqn.2002-03.com.compellent:5000d31000fcbe43'}
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        scserver = {'instanceId': '64702.30'}
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_domains.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -3898,7 +3948,8 @@ class DellSCSanAPITestCase(test.TestCase):
             mock_close_connection,
             mock_open_connection,
             mock_init):
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        scserver = {'instanceId': '64702.30'}
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -3940,9 +3991,10 @@ class DellSCSanAPITestCase(test.TestCase):
             mock_close_connection,
             mock_open_connection,
             mock_init):
+        scserver = {'instanceId': '64702.30'}
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.scapi.find_iscsi_properties,
-                          self.VOLUME)
+                          self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -3973,8 +4025,9 @@ class DellSCSanAPITestCase(test.TestCase):
                                              mock_close_connection,
                                              mock_open_connection,
                                              mock_init):
+        scserver = {'instanceId': '64702.30'}
         # Test case where Read Only mappings are found
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_is_virtualport_mode.called)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_ctrl_port.called)
@@ -4018,8 +4071,9 @@ class DellSCSanAPITestCase(test.TestCase):
         mock_find_ctrl_port.side_effect = [
             {'iscsiName': 'iqn.2002-03.com.compellent:5000d31000fcbe43'},
             {'iscsiName': 'iqn.2002-03.com.compellent:5000d31000fcbe44'}]
+        scserver = {'instanceId': '64702.30'}
         # Test case where there are multiple portals
-        res = self.scapi.find_iscsi_properties(self.VOLUME)
+        res = self.scapi.find_iscsi_properties(self.VOLUME, scserver)
         self.assertTrue(mock_find_mappings.called)
         self.assertTrue(mock_find_ctrl_port.called)
         self.assertTrue(mock_find_active_controller.called)
@@ -8968,6 +9022,112 @@ class DellStorageCenterApiHelperTestCase(test.TestCase):
         config.san_port = 3033
         helper = storagecenter_api.SCApiHelper(config, None, 'FC')
         ret = helper._setup_connection()
+        self.assertEqual(12345, ret.primaryssn)
+        self.assertEqual(12345, ret.ssn)
+        self.assertEqual('FibreChannel', ret.protocol)
+        mock_open_connection.assert_called_once_with()
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       'open_connection')
+    def test_setup_connection_excluded1(self,
+                                        mock_open_connection):
+        config = mock.MagicMock()
+        config.dell_sc_ssn = 12345
+        config.san_ip = '192.168.0.101'
+        config.san_login = 'username'
+        config.san_password = 'password'
+        config.dell_sc_volume_folder = 'a'
+        config.dell_sc_server_folder = 'a'
+        config.dell_sc_verify_cert = False
+        config.san_port = 3033
+        config.excluded_domain_ip = ['192.168.0.1']
+        config.excluded_domain_ips = ['192.168.0.2', '192.168.0.3']
+        helper = storagecenter_api.SCApiHelper(config, None, 'FC')
+        ret = helper._setup_connection()
+        self.assertEqual(set(ret.excluded_domain_ips), set(['192.168.0.2',
+                         '192.168.0.3', '192.168.0.1']))
+        self.assertEqual(12345, ret.primaryssn)
+        self.assertEqual(12345, ret.ssn)
+        self.assertEqual('FibreChannel', ret.protocol)
+        mock_open_connection.assert_called_once_with()
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       'open_connection')
+    def test_setup_connection_excluded2(self,
+                                        mock_open_connection):
+        config = mock.MagicMock()
+        config.dell_sc_ssn = 12345
+        config.san_ip = '192.168.0.101'
+        config.san_login = 'username'
+        config.san_password = 'password'
+        config.dell_sc_volume_folder = 'a'
+        config.dell_sc_server_folder = 'a'
+        config.dell_sc_verify_cert = False
+        config.san_port = 3033
+        config.excluded_domain_ip = None
+        config.excluded_domain_ips = ['192.168.0.2', '192.168.0.3']
+        helper = storagecenter_api.SCApiHelper(config, None, 'FC')
+        ret = helper._setup_connection()
+        self.assertEqual(set(ret.excluded_domain_ips), set(['192.168.0.2',
+                         '192.168.0.3']))
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       'open_connection')
+    def test_setup_connection_excluded3(self,
+                                        mock_open_connection):
+        config = mock.MagicMock()
+        config.dell_sc_ssn = 12345
+        config.san_ip = '192.168.0.101'
+        config.san_login = 'username'
+        config.san_password = 'password'
+        config.dell_sc_volume_folder = 'a'
+        config.dell_sc_server_folder = 'a'
+        config.dell_sc_verify_cert = False
+        config.san_port = 3033
+        config.excluded_domain_ip = ['192.168.0.1']
+        config.excluded_domain_ips = []
+        helper = storagecenter_api.SCApiHelper(config, None, 'FC')
+        ret = helper._setup_connection()
+        self.assertEqual(ret.excluded_domain_ips, ['192.168.0.1'])
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       'open_connection')
+    def test_setup_connection_excluded4(self,
+                                        mock_open_connection):
+        config = mock.MagicMock()
+        config.dell_sc_ssn = 12345
+        config.san_ip = '192.168.0.101'
+        config.san_login = 'username'
+        config.san_password = 'password'
+        config.dell_sc_volume_folder = 'a'
+        config.dell_sc_server_folder = 'a'
+        config.dell_sc_verify_cert = False
+        config.san_port = 3033
+        config.excluded_domain_ip = None
+        config.excluded_domain_ips = []
+        helper = storagecenter_api.SCApiHelper(config, None, 'FC')
+        ret = helper._setup_connection()
+        self.assertEqual(ret.excluded_domain_ips, [])
+
+    @mock.patch.object(storagecenter_api.SCApi,
+                       'open_connection')
+    def test_setup_connection_excluded5(self,
+                                        mock_open_connection):
+        config = mock.MagicMock()
+        config.dell_sc_ssn = 12345
+        config.san_ip = '192.168.0.101'
+        config.san_login = 'username'
+        config.san_password = 'password'
+        config.dell_sc_volume_folder = 'a'
+        config.dell_sc_server_folder = 'a'
+        config.dell_sc_verify_cert = False
+        config.san_port = 3033
+        config.excluded_domain_ip = ['192.168.0.1']
+        config.excluded_domain_ips = ['192.168.0.1', '192.168.0.2']
+        helper = storagecenter_api.SCApiHelper(config, None, 'FC')
+        ret = helper._setup_connection()
+        self.assertEqual(set(ret.excluded_domain_ips), set(['192.168.0.2',
+                         '192.168.0.1']))
         self.assertEqual(12345, ret.primaryssn)
         self.assertEqual(12345, ret.ssn)
         self.assertEqual('FibreChannel', ret.protocol)

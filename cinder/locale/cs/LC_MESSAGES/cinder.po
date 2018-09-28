@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-17 00:08+0000\n"
+"POT-Creation-Date: 2018-08-29 01:38+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Language: cs\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Czech\n"
 
 #, python-format
@@ -198,9 +198,6 @@ msgstr "'consistencygroup_id' musí být zadáno"
 msgid "'qemu-img info' parsing failed."
 msgstr "zpracování 'qemu-img info' selhalo."
 
-msgid "'status' must be specified."
-msgstr "'status' musí být zadáno."
-
 #, python-format
 msgid ""
 "(Command: %(cmd)s) (Return Code: %(exit_code)s) (Stdout: %(stdout)s) "
@@ -361,10 +358,6 @@ msgstr "Záložní operace RBD selhala"
 
 msgid "Backup already exists in database."
 msgstr "Záloha již existuje v databázi."
-
-#, python-format
-msgid "Backup driver reported an error: %(message)s"
-msgstr "Záložní ovladač nahlásil chybu: %(message)s"
 
 msgid "Backup id required"
 msgstr "ID zálohy je vyžadováno"
@@ -724,10 +717,6 @@ msgid "Condition has no field."
 msgstr "Podmínka nemá žádné pole."
 
 #, python-format
-msgid "Configuration file %(configurationFile)s does not exist."
-msgstr "Konfigurační soubor %(configurationFile)s neexistuje."
-
-#, python-format
 msgid "Configuration value %s is not set."
 msgstr "Konfigurační volba %s není nastavena."
 
@@ -1061,9 +1050,6 @@ msgstr "Nenalezen očekávaný sloupec v %(fun)s: %(hdr)s."
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "Očekávaný klíč %(key)s nenalezen v %(fun)s: %(raw)s."
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "Důvod zakázání obsahuje neplatné znaky nebo je příliš dlouhý."
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "Doména s názvem %s nebyla nalezena."
@@ -1150,10 +1136,6 @@ msgid ""
 msgstr ""
 "Chyba při přidávání do cílové skupiny: %(targetgroup)s mající IQN: %(iqn)s. "
 "Návratový kód: %(ret.status)d, zpráva: %(ret.data)s."
-
-#, python-format
-msgid "Error Attaching volume %(vol)s."
-msgstr "Chyba při připojování svazku %(vol)s."
 
 #, python-format
 msgid ""
@@ -1313,15 +1295,6 @@ msgid ""
 msgstr ""
 "Chyba při získávání sdílení: %(share)s v zásobě %(pool)s, projekt "
 "%(project)s, návratový kód: %(ret.status)d, zpráva: %(ret.data)s."
-
-#, python-format
-msgid ""
-"Error Getting Snapshot: %(snapshot)s on Volume: %(lun)s to Pool: %(pool)s "
-"Project: %(project)s  Return code: %(ret.status)d Message: %(ret.data)s."
-msgstr ""
-"Chyba při získávání snímku: %(snapshot)s ve svazku %(lun)s do zásoby "
-"%(pool)s, projekt %(project)s, návratový kód: %(ret.status)d, zpráva: "
-"%(ret.data)s."
 
 #, python-format
 msgid ""
@@ -1540,6 +1513,10 @@ msgstr "Chyba není chyba typu."
 msgid "Error renaming volume %(vol)s: %(err)s."
 msgstr "Chyba při přejmenování svazku %(vol)s: %(err)s."
 
+#, python-format
+msgid "Error response: %s"
+msgstr "Chybová odpověď: %s"
+
 msgid "Error retrieving volume size"
 msgstr "Chyba při získávání velikosti svazku"
 
@@ -1591,12 +1568,6 @@ msgid "Error while running zoning CLI: (command=%(cmd)s error=%(err)s)."
 msgstr ""
 "Chyba při spouštění rozhraní příkazového řádku pro zónu:  (příkaz=%(cmd)s "
 "chyba=%(err)s)."
-
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr ""
-"Překročen maximální počet pokusů %(max_attempts)d pro svazek %(volume_id)s."
 
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "Překročeno omezení snímků na svazek"
@@ -1651,12 +1622,6 @@ msgstr ""
 
 msgid "Extend volume error."
 msgstr "Chyba při rozšiřování svazku"
-
-msgid ""
-"Extend volume is only supported for this driver when no snapshots exist."
-msgstr ""
-"Rozšíření svazku je tímto ovladačem podporováno pouze když svazek nemá "
-"snímky."
 
 msgid "Extend volume not implemented"
 msgstr "Rozšíření svazku není zavedeno"
@@ -2568,9 +2533,6 @@ msgstr ""
 "způsobeno připojením od klienta, které bylo přerušeno a, pokud tomu tak je, "
 "může být vyřešeno novým pokus o smazání po vypršení 30 vteřin."
 
-msgid "Incorrect request body format"
-msgstr "Nesprávný formát těla požadavku"
-
 msgid "Incremental backups exist for this backup."
 msgstr "Pro tuto zálohu existují přírůstkové zálohy."
 
@@ -2757,16 +2719,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Neplatné specifikace qos: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "Neplatná žádost o připojení svazku k neplatnému hostiteli"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Neplatná žádost o připojení svazku s neplatným režimem. Režim připojení by "
-"měl být 'rw' nebo 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Neplatné vypršení rezervace %(expire)s."
@@ -2803,18 +2755,6 @@ msgstr "Neplatné nastavení aktualizace: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Neplatná hodnota '%s' pro vynucení."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Neplatná hodnota pro 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Neplatná hodnota pro 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Neplatná hodnota pro 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "Neplatná hodnota pro 'scheduler_max_attempts', musí být >=1"
@@ -2893,13 +2833,6 @@ msgstr ""
 "Vyvolání zavedení záložního systému, protože replikace není správně "
 "nastavena."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Názvy klíče mohou obsahovat pouze alfanumerické znaky, podtržítka, tečky, "
-"dvojtečky a pomlčky."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "Chyba klíče: %s"
@@ -2955,9 +2888,6 @@ msgstr "Poškozená url požadavku"
 #, python-format
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "Poškozená odpověď na příkaz %(cmd)s: %(reason)s"
-
-msgid "Malformed scheduler_hints attribute"
-msgstr "Poškozená vlastnost scheduler_hints"
 
 #, python-format
 msgid "Malformed show fcns database string: %s"
@@ -3051,15 +2981,8 @@ msgstr ""
 msgid "Missing Fibre Channel SAN configuration param - fc_fabric_names"
 msgstr "Chybí parametr nastavení Fibre Channel SAN - fc_fabric_names"
 
-msgid "Missing request body"
-msgstr "Chybí tělo žádosti"
-
 msgid "Missing request body."
 msgstr "Chybí tělo žádosti."
-
-#, python-format
-msgid "Missing required element '%s' in request body"
-msgstr "V těle žádosti chybí povinný prvek '%s'"
 
 #, python-format
 msgid "Missing required element '%s' in request body."
@@ -3088,26 +3011,11 @@ msgstr "Je nutné zavést schedule_get_pools"
 msgid "Must pass wwpn or host to lsfabric."
 msgstr "lsfabric je nutné předat wwpn nebo host."
 
-msgid "Must specify 'connector'"
-msgstr "Musíte zadat 'connector'"
-
-msgid "Must specify 'new_volume'"
-msgstr "Musíte zadat 'new_volume'"
-
-msgid "Must specify 'status'"
-msgstr "Musíte zadat 'status'"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr ""
 "Pro aktualizaci musíte zadat 'status', 'attach_status' nebo "
 "'migration_status'."
-
-msgid "Must specify a valid attach status"
-msgstr "Musíte zadat platný stav připojení"
-
-msgid "Must specify a valid migration status"
-msgstr "Musíte zadat platný stav přesunu"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -3122,17 +3030,8 @@ msgstr ""
 "Musíte zadat platný typ poskytování %(valid)s, hodnota '%(prov)s' je "
 "neplatná."
 
-msgid "Must specify a valid status"
-msgstr "Musíte zadat platný stav"
-
 msgid "Must specify an ExtensionManager class"
 msgstr "Musí být určena třída ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "V žádosti musíte zadat bootable."
-
-msgid "Must specify readonly in request."
-msgstr "V žádosti musíte zadat readonly."
 
 msgid "Must specify storage pools. Option: sio_storage_pools."
 msgstr "Musíte zadat zásoby úložiště. Volba: sio_storage_pools."
@@ -3185,12 +3084,6 @@ msgstr ""
 "Nová velikost pro rozšíření musí být větší než současná. (současná: "
 "%(size)s, rozšířená: %(new_size)s)."
 
-msgid "New volume size must be specified as an integer."
-msgstr "Nová velikost svazku musí být zadána jako celé číslo."
-
-msgid "New volume type must be specified."
-msgstr "Musíte zadat nový typ svazku."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Nový typ svazku nebyl zadán ve specifikaci žádosti."
 
@@ -3236,9 +3129,6 @@ msgstr "Pro %s nenalezeny žádné vhodné portály iscsi."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "V cílovém poli není žádný port umožňující iSCSI."
-
-msgid "No image_name was specified in request."
-msgstr "V žádosti nebyl zadán název obrazu."
 
 #, python-format
 msgid "No initiator group found for initiator %s"
@@ -3405,9 +3295,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "Cesta k certifikátu serveru REST musí být zadána."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Prosím zadejte název pro specifikaci QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -3592,12 +3479,6 @@ msgstr "Neshoda s tělem požadavku a URI"
 msgid "Request body contains too many items"
 msgstr "Tělo požadavku obsahuje příliš mnoho položek"
 
-msgid "Request body contains too many items."
-msgstr "Tělo požadavku obsahuje příliš mnoho položek."
-
-msgid "Request body empty"
-msgstr "Tělo žádosti je prázdné"
-
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
 msgstr ""
@@ -3765,14 +3646,6 @@ msgstr "Velikost"
 #, python-format
 msgid "Size for volume: %s not found, cannot secure delete."
 msgstr "Velikost pro svazek: %s nenalezeno, nelze bezpečně smazat."
-
-#, python-format
-msgid ""
-"Size is %(image_size)dGB and doesn't fit in a volume of size "
-"%(volume_size)dGB."
-msgstr ""
-"Velikost je %(image_size)dGB a nevejde se do svazku o velikosti "
-"%(volume_size)dGB."
 
 #, python-format
 msgid ""
@@ -3957,9 +3830,6 @@ msgstr "Doba konce (%(end)s) musí být po době začátku (%(start)s)."
 #, python-format
 msgid "The failed-over volume could not be deleted: %s"
 msgstr "Záložní svazek nelze smazat: %s."
-
-msgid "The key cannot be None."
-msgstr "Klíč nemůže být None."
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "Metoda update_migrated_volume není zavedena."
@@ -4507,10 +4377,6 @@ msgstr "Sada virtuálních svazků %s neexistuje."
 #, python-format
 msgid "Valid consumer of QoS specs are: %s"
 msgstr "Platní spotřebitelé specifikace QoS jsou: %s"
-
-#, python-format
-msgid "Valid control location are: %s"
-msgstr "Platná ovládací umístění jsou: %s"
 
 #, python-format
 msgid "Validate volume connection failed (error: %(err)s)."
@@ -5111,9 +4977,6 @@ msgstr "skupina jednotnosti přidělena"
 msgid "consistencygroup changed"
 msgstr "skupina jednotnosti změněna"
 
-msgid "control_location must be defined"
-msgstr "ovládací umístění musí být zadáno"
-
 #, python-format
 msgid "create_copy: Source vdisk %(src)s (%(src_id)s) does not exist."
 msgstr ""
@@ -5339,10 +5202,6 @@ msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp chybí uvozovky %s"
 
 #, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "zásady přesunu musí být 'on-demand' nebo 'never', předáno: %s"
-
-#, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."
 msgstr "mkfs selhalo u svazku %(vol)s, chybová zpráva byla: %(err)s."
 
@@ -5381,9 +5240,6 @@ msgstr "open_access_enabled není vypnuto."
 
 msgid "progress must be an integer percentage"
 msgstr "postup musí být procento vyjádřené celým číslem"
-
-msgid "provider must be defined"
-msgstr "poskytovatel musí být zadán"
 
 #, python-format
 msgid ""

@@ -60,7 +60,7 @@ TEST_SOURCE_DS8K_IP = '1.1.1.1'
 TEST_TARGET_DS8K_IP = '2.2.2.2'
 TEST_SOURCE_WWNN = '5000000000FFC111'
 TEST_TARGET_WWNN = '5000000000FFD222'
-TEST_SOURCE_WWPN_1 = '10000090FA3418BC'
+TEST_SOURCE_WWPN_1 = '10000090fa3418bc'
 TEST_SOURCE_WWPN_2 = '10000090FA3418BD'
 TEST_SOURCE_IOPORT = 'I0001'
 TEST_TARGET_IOPORT = 'I0002'
@@ -908,6 +908,8 @@ FAKE_REST_API_RESPONSES = {
         FAKE_MAP_VOLUME_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/ioports/get':
         FAKE_GET_IOPORT_RESPONSE,
+    TEST_TARGET_DS8K_IP + '/ioports/get':
+        FAKE_GET_IOPORT_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/hosts/post':
         FAKE_CREATE_HOST_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/host_ports/assign/post':
@@ -917,9 +919,16 @@ FAKE_REST_API_RESPONSES = {
     TEST_SOURCE_DS8K_IP + '/hosts%5Bid=' + TEST_HOST_ID + '%5D/mappings/' +
     TEST_LUN_ID + '/delete':
         FAKE_DELETE_MAPPINGS_RESPONSE,
+    TEST_TARGET_DS8K_IP + '/hosts%5Bid=' + TEST_HOST_ID + '%5D/mappings/' +
+    TEST_LUN_ID + '/delete':
+        FAKE_DELETE_MAPPINGS_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/host_ports/' + TEST_SOURCE_WWPN_2 + '/delete':
         FAKE_DELETE_HOST_PORTS_RESPONSE,
+    TEST_TARGET_DS8K_IP + '/host_ports/' + TEST_SOURCE_WWPN_2 + '/delete':
+        FAKE_DELETE_HOST_PORTS_RESPONSE,
     TEST_SOURCE_DS8K_IP + '/hosts%5Bid=' + TEST_HOST_ID + '%5D/delete':
+        FAKE_DELETE_HOSTS_RESPONSE,
+    TEST_TARGET_DS8K_IP + '/hosts%5Bid=' + TEST_HOST_ID + '%5D/delete':
         FAKE_DELETE_HOSTS_RESPONSE
 }
 
@@ -1250,7 +1259,8 @@ class DS8KProxyTest(test.TestCase):
             "consistent_group_snapshot_enabled": True,
             "group_replication_enabled": True,
             "consistent_group_replication_enabled": True,
-            "multiattach": False
+            "multiattach": True,
+            "backend_state": 'up'
         }
 
         self.driver._update_stats()
@@ -1274,8 +1284,56 @@ class DS8KProxyTest(test.TestCase):
         with mock.patch.object(helper.DS8KCommonHelper,
                                'get_pools') as mock_get_pools:
             mock_get_pools.return_value = []
-            self.assertRaises(exception.CinderException,
-                              self.driver._update_stats)
+            stats = self.driver.get_volume_stats()
+            self.assertEqual('down', stats['backend_state'])
+            self.assertEqual('None', stats['extent_pools'])
+            self.assertEqual(0, stats['total_capacity_gb'])
+            self.assertEqual(0, stats['free_capacity_gb'])
+
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_pools')
+    def test_get_volume_status(self, mock_get_pools):
+        self.configuration.san_clustername = 'P0, P1'
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        from collections import OrderedDict
+        mock_get_pools.side_effect = [OrderedDict([('P0',
+                                                    {'node': 0,
+                                                     'cap': 21474836480,
+                                                     'capavail': 21474836480,
+                                                     'name': 'pool1',
+                                                     'stgtype': 'fb'}),
+                                                   ('P1',
+                                                    {'node': 1,
+                                                     'cap': 21474836480,
+                                                     'capavail': 21474836480,
+                                                     'name': 'pool1',
+                                                     'stgtype': 'fb'})]),
+                                      OrderedDict([('P1',
+                                                    {'node': 1,
+                                                     'cap': 21474836480,
+                                                     'capavail': 21474836480,
+                                                     'name': 'pool1',
+                                                     'stgtype': 'fb'})])]
+        self.driver.setup(self.ctxt)
+        expected_result = {
+            "volume_backend_name": TEST_VOLUME_BACKEND_NAME,
+            "serial_number": TEST_SOURCE_SYSTEM_UNIT,
+            "extent_pools": 'P1',
+            "vendor_name": 'IBM',
+            "driver_version": 'IBM Storage (v2.0.0)',
+            "storage_protocol": storage.XIV_CONNECTION_TYPE_FC,
+            "total_capacity_gb": 20,
+            "free_capacity_gb": 20,
+            "reserved_percentage": 0,
+            "consistent_group_snapshot_enabled": True,
+            "group_replication_enabled": True,
+            "consistent_group_replication_enabled": True,
+            "multiattach": True,
+            "backend_state": 'up'
+        }
+
+        stats = self.driver.get_volume_stats()
+        self.assertDictEqual(expected_result, stats)
 
     def test_find_pool_should_choose_biggest_pool(self):
         """create volume should choose biggest pool."""
@@ -2555,6 +2613,124 @@ class DS8KProxyTest(test.TestCase):
                           self.driver.retype,
                           self.ctxt, volume, new_type, diff, host)
 
+    def test_retype_vol_from_non_multiattch_to_multiattch(self):
+        """retype volume from a non multiattach to multiattach."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        new_type = {}
+        diff = {
+            'encryption': {},
+            'qos_specs': {},
+            'extra_specs': {
+                'multiattach': ('<is> False', '<is> True')
+            }
+        }
+        host = None
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
+                                       {'multiattach': '<is> False'})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        metadata = [{'key': 'data_type', 'value': 'FB 512'}]
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location,
+                                     volume_metadata=metadata)
+        retyped, retype_model_update = self.driver.retype(self.ctxt, volume,
+                                                          new_type, diff, host)
+        self.assertTrue(retype_model_update['multiattach'])
+        self.assertTrue(retyped)
+
+    def test_retype_vol_from_multiattch_to_non_multiattch(self):
+        """retype volume from a multiattach to non multiattach."""
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        new_type = {}
+        diff = {
+            'encryption': {},
+            'qos_specs': {},
+            'extra_specs': {
+                'multiattach': ('<is> True', '<is> False')
+            }
+        }
+        host = None
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
+                                       {'multiattach': '<is> True'})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        metadata = [{'key': 'data_type', 'value': 'FB 512'}]
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location,
+                                     volume_metadata=metadata)
+        retyped, retype_model_update = self.driver.retype(self.ctxt, volume,
+                                                          new_type, diff, host)
+        self.assertFalse(retype_model_update['multiattach'])
+        self.assertTrue(retyped)
+
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    def test_retype_vol_from_non_multiattach_to_multiattach_and_replicated(
+            self, mock_get_flashcopy):
+        """retype from non multiattach to multiattach and replicated."""
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        new_type = {}
+        diff = {
+            'encryption': {},
+            'qos_specs': {},
+            'extra_specs': {
+                'multiattach': ('<is> False', '<is> True'),
+                'replication_enabled': ('<is> False', '<is> True')
+            }
+        }
+        host = None
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+        retyped, retype_model_update = self.driver.retype(
+            self.ctxt, volume, new_type, diff, host)
+        self.assertTrue(retype_model_update['multiattach'])
+        self.assertTrue(retyped)
+
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_flashcopy')
+    @mock.patch.object(helper.DS8KCommonHelper, 'get_lun_pool')
+    def test_retype_non_multiattach_vol_to_multiattach_vol_in_specific_area(
+            self, mock_get_lun_pool, mock_get_flashcopy):
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        new_type = {}
+        diff = {
+            'encryption': {},
+            'qos_specs': {},
+            'extra_specs': {
+                'multiattach': ('<is> False', '<is> True'),
+                'drivers:storage_pool_ids': (None, TEST_POOL_ID_1),
+                'drivers:storage_lss_ids': (None, TEST_LSS_ID_1)
+            }
+        }
+        host = None
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
+                                       {'multiattach': '<is> False'})
+        location = six.text_type({'vol_hex_id': '0400'})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+
+        mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
+        mock_get_lun_pool.return_value = {'id': TEST_POOL_ID_1}
+        retyped, retype_model_update = self.driver.retype(
+            self.ctxt, volume, new_type, diff, host)
+        location = ast.literal_eval(retype_model_update['provider_location'])
+        self.assertEqual(TEST_LSS_ID_1, location['vol_hex_id'][:2])
+        self.assertTrue(retype_model_update['multiattach'])
+        self.assertTrue(retyped)
+
     def test_migrate_replicated_volume(self):
         """migrate replicated volume should be failed."""
         self.driver = FakeDS8KProxy(self.storage_info, self.logger,
@@ -2631,8 +2807,9 @@ class DS8KProxyTest(test.TestCase):
         }
         mock_get_flashcopy.side_effect = [[TEST_FLASHCOPY], {}]
         with mock.patch.object(helper.DS8KCommonHelper,
-                               '_get_pools') as get_pools:
-            get_pools.return_value = FAKE_GET_POOL_RESPONSE_2['data']['pools']
+                               '_get_pool') as get_pool:
+            get_pool.return_value = FAKE_GET_POOL_RESPONSE_2['data'][
+                'pools'][0]
             moved, model_update = self.driver.migrate_volume(
                 self.ctxt, volume, backend)
             self.assertTrue(moved)
@@ -2649,6 +2826,9 @@ class DS8KProxyTest(test.TestCase):
 
         map_data = self.driver.initialize_connection(volume, TEST_CONNECTOR)
         self.assertEqual(int(TEST_LUN_ID), map_data['data']['target_lun'])
+        self.assertEqual(sorted(list(
+            map_data['data']['initiator_target_map'].keys()), key=str.lower),
+            [TEST_SOURCE_WWPN_1, TEST_SOURCE_WWPN_2])
 
     def test_initialize_connection_of_eckd_volume(self):
         """attach a ECKD volume to host."""
@@ -2740,6 +2920,23 @@ class DS8KProxyTest(test.TestCase):
 
         self.driver.terminate_connection(volume, TEST_CONNECTOR)
 
+    def test_terminate_connection_of_eckd_volume(self):
+        """attach a ECKD volume to host."""
+        self.configuration.connection_type = (
+            storage.XIV_CONNECTION_TYPE_FC_ECKD)
+        self.configuration.ds8k_devadd_unitadd_mapping = 'C4-10'
+        self.configuration.ds8k_ssid_prefix = 'FF'
+        self.configuration.san_clustername = TEST_ECKD_POOL_ID
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE', {})
+        location = six.text_type({'vol_hex_id': TEST_ECKD_VOLUME_ID})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location)
+        unmap_data = self.driver.terminate_connection(volume, {})
+        self.assertIsNone(unmap_data)
+
     @mock.patch.object(helper.DS8KCommonHelper, '_get_host_ports')
     def test_terminate_connection_with_multiple_hosts(self,
                                                       mock_get_host_ports):
@@ -2795,8 +2992,7 @@ class DS8KProxyTest(test.TestCase):
             }
         ]
         mock_get_host_ports.side_effect = [host_ports]
-        unmap_data = self.driver.terminate_connection(volume, TEST_CONNECTOR)
-        self.assertIsNone(unmap_data)
+        self.driver.terminate_connection(volume, TEST_CONNECTOR)
 
     @mock.patch.object(helper.DS8KCommonHelper, '_get_host_ports')
     @mock.patch.object(helper.DS8KCommonHelper, '_get_mappings')
@@ -2827,6 +3023,131 @@ class DS8KProxyTest(test.TestCase):
                 "host_id": ''
             }
         ]
+        mappings = [
+            {
+                "lunid": TEST_LUN_ID,
+                "link": {},
+                "volume": {"id": TEST_VOLUME_ID, "link": {}}
+            }
+        ]
+        mock_get_host_ports.side_effect = [host_ports]
+        mock_get_mappings.side_effect = [mappings]
+        ret_info = self.driver.terminate_connection(volume, TEST_CONNECTOR)
+        self.assertEqual(sorted(list(
+            ret_info['data']['initiator_target_map'].keys()), key=str.lower),
+            [TEST_SOURCE_WWPN_1, TEST_SOURCE_WWPN_2])
+
+    @mock.patch.object(helper.DS8KCommonHelper, '_get_host_ports')
+    @mock.patch.object(helper.DS8KCommonHelper, '_get_mappings')
+    def test_detach_with_host_has_failed_over(self, mock_get_mappings,
+                                              mock_get_host_ports):
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self, TEST_TARGET_DS8K_IP)
+        self.driver.setup(self.ctxt)
+
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
+                                       {'replication_enabled': '<is> True'})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        data = json.dumps(
+            {'default': {'vol_hex_id': TEST_VOLUME_ID}})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location,
+                                     replication_driver_data=data)
+        host_ports_1 = [
+            {
+                "wwpn": TEST_SOURCE_WWPN_1,
+                "state": "logged in",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": TEST_HOST_ID
+            },
+            {
+                "wwpn": TEST_SOURCE_WWPN_2,
+                "state": "unconfigured",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": ''
+            }
+        ]
+        host_ports_2 = [
+            {
+                "wwpn": TEST_SOURCE_WWPN_1,
+                "state": "logged in",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": TEST_HOST_ID
+            },
+            {
+                "wwpn": TEST_SOURCE_WWPN_2,
+                "state": "unconfigured",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": ''
+            }
+        ]
+        mappings_1 = [
+            {
+                "lunid": TEST_LUN_ID,
+                "link": {},
+                "volume": {"id": TEST_VOLUME_ID_2, "link": {}}
+            }
+        ]
+        mappings_2 = [
+            {
+                "lunid": TEST_LUN_ID,
+                "link": {},
+                "volume": {"id": TEST_VOLUME_ID, "link": {}}
+            }
+        ]
+        mock_get_host_ports.side_effect = [host_ports_1, host_ports_2]
+        mock_get_mappings.side_effect = [mappings_1, mappings_2]
+        self.driver.terminate_connection(volume, TEST_CONNECTOR)
+
+    @mock.patch.object(helper.DS8KCommonHelper, '_get_host_ports')
+    @mock.patch.object(helper.DS8KCommonHelper, '_get_mappings')
+    def test_detach_with_group_has_failed_over(self, mock_get_mappings,
+                                               mock_get_host_ports):
+        self.configuration.replication_device = [TEST_REPLICATION_DEVICE]
+        self.driver = FakeDS8KProxy(self.storage_info, self.logger,
+                                    self.exception, self)
+        self.driver.setup(self.ctxt)
+
+        group_type = group_types.create(
+            self.ctxt,
+            'group',
+            {'consistent_group_snapshot_enabled': '<is> True'}
+        )
+        group = self._create_group(host=TEST_GROUP_HOST,
+                                   group_type_id=group_type.id,
+                                   replication_status='failed-over')
+        vol_type = volume_types.create(self.ctxt, 'VOL_TYPE',
+                                       {'replication_enabled': '<is> True'})
+        location = six.text_type({'vol_hex_id': TEST_VOLUME_ID})
+        data = json.dumps(
+            {'default': {'vol_hex_id': TEST_VOLUME_ID}})
+        volume = self._create_volume(volume_type_id=vol_type.id,
+                                     provider_location=location,
+                                     replication_driver_data=data,
+                                     group_id=group.id,
+                                     replication_status='failed-over')
+        host_ports = [
+            {
+                "wwpn": TEST_SOURCE_WWPN_1,
+                "state": "logged in",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": TEST_HOST_ID
+            },
+            {
+                "wwpn": TEST_SOURCE_WWPN_2,
+                "state": "unconfigured",
+                "hosttype": "LinuxRHEL",
+                "addrdiscovery": "lunpolling",
+                "host_id": ''
+            }
+        ]
+
         mappings = [
             {
                 "lunid": TEST_LUN_ID,

@@ -639,6 +639,17 @@ def get_all_volume_groups(vg_name=None):
         utils.get_root_helper(),
         vg_name)
 
+
+def extract_availability_zones_from_volume_type(volume_type):
+    if not volume_type:
+        return None
+    extra_specs = volume_type.get('extra_specs', {})
+    if 'RESKEY:availability_zones' not in extra_specs:
+        return None
+    azs = extra_specs.get('RESKEY:availability_zones', '').split(',')
+    return [az.strip() for az in azs if az != '']
+
+
 # Default symbols to use for passwords. Avoids visually confusing characters.
 # ~6 bits per symbol
 DEFAULT_PASSWORD_SYMBOLS = ('23456789',  # Removed: 0,1
@@ -779,7 +790,7 @@ def read_proc_mounts():
 
 def extract_id_from_volume_name(vol_name):
     regex = re.compile(
-        CONF.volume_name_template.replace('%s', '(?P<uuid>.+)'))
+        CONF.volume_name_template.replace('%s', r'(?P<uuid>.+)'))
     match = regex.match(vol_name)
     return match.group('uuid') if match else None
 
@@ -802,7 +813,7 @@ def check_already_managed_volume(vol_id):
 def extract_id_from_snapshot_name(snap_name):
     """Return a snapshot's ID from its name on the backend."""
     regex = re.compile(
-        CONF.snapshot_name_template.replace('%s', '(?P<uuid>.+)'))
+        CONF.snapshot_name_template.replace('%s', r'(?P<uuid>.+)'))
     match = regex.match(snap_name)
     return match.group('uuid') if match else None
 
@@ -991,7 +1002,6 @@ def get_max_over_subscription_ratio(str_value, supports_auto=False):
 
     :param str_value: Configuration object
     :param supports_auto: Tell if the calling driver supports auto MOSR.
-    :param drv_msg: Error message from the caller
     :response: value of mosr
     """
 
@@ -1012,3 +1022,14 @@ def get_max_over_subscription_ratio(str_value, supports_auto=False):
         LOG.error(msg)
         raise exception.InvalidParameterValue(message=msg)
     return mosr
+
+
+def make_initiator_target_all2all_map(initiator_wwpns, target_wwpns):
+    """Build a simplistic all-to-all mapping."""
+    i_t_map = {}
+    for i_wwpn in initiator_wwpns:
+        i_t_map[str(i_wwpn)] = []
+        for t_wwpn in target_wwpns:
+            i_t_map[i_wwpn].append(t_wwpn)
+
+    return i_t_map

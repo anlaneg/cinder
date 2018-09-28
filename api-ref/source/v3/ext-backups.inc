@@ -48,7 +48,7 @@ API will return bad request.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -115,7 +115,7 @@ Show backup detail
 Shows details for a backup.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -173,7 +173,7 @@ Delete a backup
 Deletes a backup.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -213,7 +213,7 @@ In this case, if the name parameter is provided, it will be used as the
 name of the new volume.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -233,7 +233,7 @@ Request
    - project_id: project_id_path
    - backup_id: backup_id
    - restore: restore
-   - name: name_8
+   - name: volume_name_optional
    - volume_id: volume_id_6
 
 Request Example
@@ -263,10 +263,10 @@ Create a backup
 
 .. rest_method::  POST /v3/{project_id}/backups
 
-Creates a Block Storage backup from a volume.
+Creates a Block Storage backup from a volume or snapshot.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -292,6 +292,7 @@ Request
    - name: name_optional
    - snapshot_id: snapshot_id_3
    - metadata: metadata_9
+   - availability_zone: availability_zone_4
 
 Request Example
 ---------------
@@ -318,7 +319,7 @@ Update a backup
 Update a Block Storage backup. This API is available since v3.9.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -373,7 +374,7 @@ since v3.31 if non-admin users specify invalid filters in the
 url, API will return bad request.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -422,7 +423,7 @@ Export information about a backup.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -448,6 +449,7 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
+   - backup-record: backup_record
    - backup_service: backup_service
    - backup_url: backup_url
 
@@ -467,7 +469,7 @@ Import information about a backup.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -486,6 +488,9 @@ Request
 
    - project_id: project_id_path
    - backup_id: backup_id
+   - backup-record: backup_record
+   - backup_service: backup_service
+   - backup_url: backup_url
 
 
 Request Example

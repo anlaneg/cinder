@@ -39,6 +39,7 @@ Supported operations
 - Create a consistency group from consistency group snapshots.
 - Replication v2.1 support.
 - Generic Group support.
+- Revert a volume to a snapshot.
 
 Preparation
 ~~~~~~~~~~~
@@ -376,6 +377,11 @@ limit and will report 0 free capacity to the scheduler if the limit is reached.
 So the scheduler will be able to skip this kind of pool-based back end that
 runs out of the pool volume number.
 
+.. note::
+
+   From Queens, ``check_max_pool_luns_threshold`` is obsolete. And the behavior
+   is like where ``check_max_pool_luns_threshold`` is set to ``True``.
+
 iSCSI initiators
 ----------------
 
@@ -447,7 +453,7 @@ Use the following command to update the extra spec of a volume type:
 
 .. code-block:: console
 
-   $ openstack volume type set --property provisioning:type=thin thick_provisioning_support='<is> True' demoVolumeType
+   $ openstack volume type set --property provisioning:type=thin --property thick_provisioning_support='<is> True' demoVolumeType
 
 The following sections describe the VNX extra keys.
 
@@ -467,7 +473,7 @@ Provisioning type
       .. code-block:: console
 
          $ openstack volume type create ThickVolumeType
-         $ openstack volume type set --property provisioning:type=thick thick_provisioning_support='<is> True' ThickVolumeType
+         $ openstack volume type set --property provisioning:type=thick --property thick_provisioning_support='<is> True' ThickVolumeType
 
    -  ``thin``
 
@@ -478,7 +484,7 @@ Provisioning type
       .. code-block:: console
 
          $ openstack volume type create ThinVolumeType
-         $ openstack volume type set --property provisioning:type=thin thin_provisioning_support='<is> True' ThinVolumeType
+         $ openstack volume type set --property provisioning:type=thin --property thin_provisioning_support='<is> True' ThinVolumeType
 
    -  ``deduplicated``
 
@@ -493,7 +499,7 @@ Provisioning type
       .. code-block:: console
 
          $ openstack volume type create DeduplicatedVolumeType
-         $ openstack volume type set --property provisioning:type=deduplicated deduplicated_support='<is> True' DeduplicatedVolumeType
+         $ openstack volume type set --property provisioning:type=deduplicated --property deduplicated_support='<is> True' DeduplicatedVolumeType
 
    -  ``compressed``
 
@@ -509,7 +515,7 @@ Provisioning type
       .. code-block:: console
 
          $ openstack volume type create CompressedVolumeType
-         $ openstack volume type set --property provisioning:type=compressed compression_support='<is> True' CompressedVolumeType
+         $ openstack volume type set --property provisioning:type=compressed --property compression_support='<is> True' CompressedVolumeType
 
 -  Default: ``thick``
 
@@ -544,7 +550,7 @@ Run the following commands to create a volume type with tiering policy:
 .. code-block:: console
 
    $ openstack volume type create ThinVolumeOnAutoTier
-   $ openstack volume type set --property provisioning:type=thin storagetype:tiering=Auto fast_support='<is> True' ThinVolumeOnAutoTier
+   $ openstack volume type set --property provisioning:type=thin --property storagetype:tiering=Auto --property fast_support='<is> True' ThinVolumeOnAutoTier
 
 .. note::
 
@@ -587,7 +593,7 @@ Run the following commands to create the volume type:
 .. code-block:: console
 
    $ openstack volume type create HighPerf
-   $ openstack volume type set --property pool_name=Pool_02_SASFLASH volume_backend_name=vnx_41 HighPerf
+   $ openstack volume type set --property pool_name=Pool_02_SASFLASH --property volume_backend_name=vnx_41 HighPerf
 
 Obsolete extra specs
 --------------------
@@ -809,8 +815,9 @@ The major configuration includes:
 #. Specify ``use_multipath_for_image_xfer=true`` in the ``cinder.conf`` file
    for each FC/iSCSI back end.
 
-#. Specify ``iscsi_use_multipath=True`` in ``libvirt`` section of the
+#. Specify ``volume_use_multipath=True`` in ``libvirt`` section of the
    ``nova.conf`` file. This option is valid for both iSCSI and FC driver.
+   In versions prior to Newton, the option was called ``iscsi_use_multipath``.
 
 For multipath-tools, here is an EMC recommended sample of
 ``/etc/multipath.conf`` file.

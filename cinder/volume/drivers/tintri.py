@@ -21,7 +21,6 @@ import json
 import math
 import os
 import re
-import socket
 
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -113,6 +112,9 @@ class TintriDriver(driver.ManageableVD,
         self._api_version = getattr(self.configuration, 'tintri_api_version')
         self._image_cache_expiry = getattr(self.configuration,
                                            'tintri_image_cache_expiry_days')
+        self.verify_ssl = getattr(self.configuration, 'driver_ssl_cert_verify')
+        self.ssl_cert_path = getattr(self.configuration,
+                                     'driver_ssl_cert_path')
 
     def get_pool(self, volume):
         """Returns pool name where volume resides.
@@ -317,12 +319,6 @@ class TintriDriver(driver.ManageableVD,
     def _get_export_path(self, volume_id):
         """Returns NFS export path for the given volume."""
         return self._get_provider_location(volume_id).split(':')[1]
-
-    def _resolve_hostname(self, hostname):
-        """Resolves host name to IP address."""
-        res = socket.getaddrinfo(hostname, None)[0]
-        family, socktype, proto, canonname, sockaddr = res
-        return sockaddr[0]
 
     def _is_volume_present(self, volume_path):
         """Checks if volume exists."""
@@ -605,9 +601,9 @@ class TintriDriver(driver.ManageableVD,
         try:
             if conn:
                 host = conn.split(':')[0]
-                ip = self._resolve_hostname(host)
+                ip = utils.resolve_hostname(host)
                 for sh in self._mounted_shares + self._mounted_image_shares:
-                    sh_ip = self._resolve_hostname(sh.split(':')[0])
+                    sh_ip = utils.resolve_hostname(sh.split(':')[0])
                     sh_exp = sh.split(':')[1]
                     if sh_ip == ip and sh_exp == dr:
                         LOG.debug('Found share match %s', sh)
@@ -758,7 +754,7 @@ class TintriDriver(driver.ManageableVD,
     def _convert_volume_share(self, volume_share):
         """Converts the share name to IP address."""
         share_split = volume_share.rsplit(':', 1)
-        return self._resolve_hostname(share_split[0]) + ':' + share_split[1]
+        return utils.resolve_hostname(share_split[0]) + ':' + share_split[1]
 
     def _get_share_mount(self, vol_ref):
         """Get the NFS share, NFS mount, and volume path from reference.
@@ -841,24 +837,31 @@ class TClient(object):
         url = self.api_url + api
 
         return requests.get(url, headers=self.headers,
-                            params=query, verify=False)
+                            params=query, verify=self.verify_ssl,
+                            cert=self.ssl_cert_path)
 
     def delete(self, api):
         url = self.api_url + api
 
-        return requests.delete(url, headers=self.headers, verify=False)
+        return requests.delete(url, headers=self.headers,
+                               verify=self.verify_ssl,
+                               cert=self.ssl_cert_path)
 
     def put(self, api, payload):
         url = self.api_url + api
 
         return requests.put(url, data=json.dumps(payload),
-                            headers=self.headers, verify=False)
+                            headers=self.headers,
+                            verify=self.verify_ssl,
+                            cert=self.ssl_cert_path)
 
     def post(self, api, payload):
         url = self.api_url + api
 
         return requests.post(url, data=json.dumps(payload),
-                             headers=self.headers, verify=False)
+                             headers=self.headers,
+                             verify=self.verify_ssl,
+                             cert=self.ssl_cert_path)
 
     def login(self, username, password):
         # Payload, header and URL for login
@@ -872,7 +875,9 @@ class TClient(object):
         url = self.api_url + '/' + self.api_version + '/session/login'
 
         r = requests.post(url, data=json.dumps(payload),
-                          headers=headers, verify=False)
+                          headers=headers,
+                          verify=self.verify_ssl,
+                          cert=self.ssl_cert_path)
 
         if r.status_code != 200:
             msg = _('Failed to login for user %s.') % username
@@ -883,7 +888,9 @@ class TClient(object):
     def logout(self):
         url = self.api_url + '/' + self.api_version + '/session/logout'
 
-        requests.get(url, headers=self.headers, verify=False)
+        requests.get(url, headers=self.headers,
+                     verify=self.verify_ssl,
+                     cert=self.ssl_cert_path)
 
     @staticmethod
     def _remove_prefix(volume_path, prefix):

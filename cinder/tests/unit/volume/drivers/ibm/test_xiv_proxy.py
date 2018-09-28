@@ -126,6 +126,8 @@ REPLICA_PARAMS = {
     'san_password': cryptish.encrypt(REPLICA_PASSWORD),
     'san_clustername': REPLICA_POOL
 }
+TEST_POOL = [
+    {'name': 'WTF32', 'size': 10026, 'empty_space': 6925}]
 
 
 class XIVProxyTest(test.TestCase):
@@ -187,6 +189,25 @@ class XIVProxyTest(test.TestCase):
                        test_mock.cinder.exception)
 
         self.assertRaises(test_mock.cinder.exception.InvalidParameterValue,
+                          p.setup, {})
+
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy.client."
+                "XCLIClient")
+    def test_setup_should_fail_if_pool_is_invalid(self, mock_xcli):
+        """Setup should raise exception if pool is invalid"""
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        cmd = mock_xcli.connect_multiendpoint_ssl.return_value.cmd
+        cmd.pool_list.return_value.as_list = []
+
+        self.assertRaises(test_mock.cinder.exception.VolumeBackendAPIException,
                           p.setup, {})
 
     @mock.patch("cinder.volume.drivers.ibm.ibm_storage.xiv_proxy.client."
@@ -337,6 +358,26 @@ class XIVProxyTest(test.TestCase):
             errors.XCLIError('bla'))
 
         self.assertRaises(exception.VolumeBackendAPIException, p.setup, {})
+
+    def test_get_volume_stats(self):
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        p.ibm_storage_cli = mock.MagicMock()
+
+        p.ibm_storage_cli.cmd.pool_list.return_value.as_list = TEST_POOL
+        stats = p.get_volume_stats()
+        self.assertEqual("up", stats['backend_state'])
+
+        p.ibm_storage_cli.cmd.pool_list.return_value.as_list = None
+        stats = p.get_volume_stats(refresh=True)
+        self.assertEqual("down", stats['backend_state'])
 
     def test_create_volume_should_call_xcli(self):
         """Create volume should call xcli with the correct parameters"""
@@ -649,6 +690,32 @@ class XIVProxyTest(test.TestCase):
         failover_rep_mgr.change_role.assert_called_once_with(
             resource_id=group['name'],
             new_role='Slave')
+
+    @mock.patch("cinder.volume.drivers.ibm.ibm_storage."
+                "xiv_proxy.XIVProxy._get_target_params",
+                mock.MagicMock(return_value=REPLICA_PARAMS))
+    def test_pool_with_replication_failover_back(self):
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        pool_name = p._get_backend_pool()
+        self.assertEqual(self.default_storage_info['vol_pool'], pool_name)
+
+        p_failback = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver,
+            REPLICA_ID)
+
+        pool_name = p_failback._get_backend_pool()
+        self.assertEqual(REPLICA_POOL, pool_name)
 
     @mock.patch("cinder.volume.utils.is_group_a_cg_snapshot_type",
                 mock.MagicMock(return_value=True))
@@ -1460,6 +1527,24 @@ class XIVProxyTest(test.TestCase):
         p.ibm_storage_cli.cmd.host_connectivity_list.return_value = (
             HOST_CONNECTIVITY_LIST_UNKNOWN_HOST)
         fc_targets = p._get_fc_targets(host)
+        six.assertCountEqual(self,
+                             FC_TARGETS_OPTIMIZED, fc_targets,
+                             "FC targets are different from the expected")
+
+    def test_define_fc_returns_all_wwpns_list(self):
+        driver = mock.MagicMock()
+        driver.VERSION = "VERSION"
+
+        p = self.proxy(
+            self.default_storage_info,
+            mock.MagicMock(),
+            test_mock.cinder.exception,
+            driver)
+
+        p.ibm_storage_cli = mock.MagicMock()
+        p.ibm_storage_cli.cmd.fc_port_list.return_value = FC_PORT_LIST_OUTPUT
+        p.ibm_storage_cli.fc_connectivity_list.return_value = ()
+        fc_targets = p._define_fc(p._define_host(TEST_CONNECTOR))
         six.assertCountEqual(self,
                              FC_TARGETS_OPTIMIZED, fc_targets,
                              "FC targets are different from the expected")

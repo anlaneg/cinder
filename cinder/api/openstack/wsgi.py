@@ -14,6 +14,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import collections
 import functools
 import inspect
 import math
@@ -864,12 +865,12 @@ class Resource(wsgi.Application):
             decoded_body = encodeutils.safe_decode(body, errors='ignore')
             msg = ("Action: '%(action)s', calling method: %(meth)s, body: "
                    "%(body)s") % {'action': action,
-                                  'body': six.text_type(decoded_body),
-                                  'meth': six.text_type(meth)}
+                                  'body': decoded_body,
+                                  'meth': meth.__name__}
             LOG.debug(strutils.mask_password(msg))
         else:
             LOG.debug("Calling method '%(meth)s'",
-                      {'meth': six.text_type(meth)})
+                      {'meth': meth.__name__})
 
         # Now, deserialize the request body...
         try:
@@ -1088,7 +1089,7 @@ class ControllerMetaclass(type):
                 versioned_methods.append(getattr(base, VER_METHOD_ATTR))
 
         for key, value in cls_dict.items():
-            if not callable(value):
+            if not isinstance(value, collections.Callable):
                 continue
             if getattr(value, 'wsgi_action', None):
                 actions[value.wsgi_action] = key

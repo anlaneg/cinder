@@ -152,6 +152,12 @@ class NetAppESeriesLibrary(object):
         if self.configuration.netapp_enable_multiattach:
             self._ensure_multi_attach_host_group_exists()
 
+        # This driver has been marked 'deprecated' in the Rocky release and
+        # will be removed in Stein.
+        msg = _("The NetApp E-Series driver is deprecated and will be "
+                "removed in a future release.")
+        versionutils.report_deprecated_feature(LOG, msg)
+
     def _create_rest_client(self, configuration):
         port = configuration.netapp_server_port
         scheme = configuration.netapp_transport_type.lower()
@@ -372,7 +378,7 @@ class NetAppESeriesLibrary(object):
                 raise loopingcall.LoopingCallDone()
 
         checker = loopingcall.FixedIntervalLoopingCall(f=check_system_status)
-        checker.start(interval = self.SLEEP_SECS,
+        checker.start(interval=self.SLEEP_SECS,
                       initial_delay=self.SLEEP_SECS).wait()
 
         return True

@@ -16,7 +16,6 @@
 import inspect
 import json
 import math
-import random
 import re
 import socket
 import string
@@ -135,6 +134,44 @@ def retry(exc_tuple, tries=5, delay=1, backoff=2):
     return retry_dec
 
 
+def locked_image_id_operation(f, external=False):
+    def lvo_inner1(inst, *args, **kwargs):
+        lock_tag = inst.driver_prefix
+        call_args = inspect.getcallargs(f, inst, *args, **kwargs)
+
+        if call_args.get('image_meta'):
+            image_id = call_args['image_meta']['id']
+        else:
+            err_msg = _('The decorated method must accept image_meta.')
+            raise exception.VolumeBackendAPIException(data=err_msg)
+
+        @utils.synchronized('%s-%s' % (lock_tag, image_id),
+                            external=external)
+        def lvo_inner2():
+            return f(inst, *args, **kwargs)
+        return lvo_inner2()
+    return lvo_inner1
+
+
+def locked_source_id_operation(f, external=False):
+    def lvo_inner1(inst, *args, **kwargs):
+        lock_tag = inst.driver_prefix
+        call_args = inspect.getcallargs(f, inst, *args, **kwargs)
+        src_arg = call_args.get('source', None)
+        if src_arg and src_arg.get('id', None):
+            source_id = call_args['source']['id']
+        else:
+            err_msg = _('The decorated method must accept src_uuid.')
+            raise exception.VolumeBackendAPIException(message=err_msg)
+
+        @utils.synchronized('%s-%s' % (lock_tag, source_id),
+                            external=external)
+        def lvo_inner2():
+            return f(inst, *args, **kwargs)
+        return lvo_inner2()
+    return lvo_inner1
+
+
 @interface.volumedriver
 class SolidFireDriver(san.SanISCSIDriver):
     """OpenStack driver to enable SolidFire cluster.
@@ -213,6 +250,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         self.cluster_pairs = []
         self.replication_enabled = False
         self.failed_over = False
+        self.verify_ssl = self.configuration.driver_ssl_cert_verify
         self.target_driver = SolidFireISCSI(solidfire_driver=self,
                                             configuration=self.configuration)
         self.default_cluster = self._create_cluster_reference()
@@ -245,42 +283,6 @@ class SolidFireDriver(san.SanISCSIDriver):
             self.template_account_id = self._create_template_account(account)
 
         self._set_cluster_pairs()
-
-    def locked_image_id_operation(f, external=False):
-        def lvo_inner1(inst, *args, **kwargs):
-            lock_tag = inst.driver_prefix
-            call_args = inspect.getcallargs(f, inst, *args, **kwargs)
-
-            if call_args.get('image_meta'):
-                image_id = call_args['image_meta']['id']
-            else:
-                err_msg = _('The decorated method must accept image_meta.')
-                raise exception.VolumeBackendAPIException(data=err_msg)
-
-            @utils.synchronized('%s-%s' % (lock_tag, image_id),
-                                external=external)
-            def lvo_inner2():
-                return f(inst, *args, **kwargs)
-            return lvo_inner2()
-        return lvo_inner1
-
-    def locked_source_id_operation(f, external=False):
-        def lvo_inner1(inst, *args, **kwargs):
-            lock_tag = inst.driver_prefix
-            call_args = inspect.getcallargs(f, inst, *args, **kwargs)
-            src_arg = call_args.get('source', None)
-            if src_arg and src_arg.get('id', None):
-                source_id = call_args['source']['id']
-            else:
-                err_msg = _('The decorated method must accept src_uuid.')
-                raise exception.VolumeBackendAPIException(message=err_msg)
-
-            @utils.synchronized('%s-%s' % (lock_tag, source_id),
-                                external=external)
-            def lvo_inner2():
-                return f(inst, *args, **kwargs)
-            return lvo_inner2()
-        return lvo_inner1
 
     def __getattr__(self, attr):
         if hasattr(self.target_driver, attr):
@@ -514,7 +516,7 @@ class SolidFireDriver(san.SanISCSIDriver):
             req = requests.post(url,
                                 data=json.dumps(payload),
                                 auth=(endpoint['login'], endpoint['passwd']),
-                                verify=False,
+                                verify=self.verify_ssl,
                                 timeout=30)
         response = req.json()
         req.close()
@@ -655,8 +657,9 @@ class SolidFireDriver(san.SanISCSIDriver):
     def _generate_random_string(self, length):
         """Generates random_string to use for CHAP password."""
 
-        char_set = string.ascii_uppercase + string.digits
-        return ''.join(random.sample(char_set, length))
+        return vol_utils.generate_password(
+            length=length,
+            symbolgroups=(string.ascii_uppercase + string.digits))
 
     def _get_model_info(self, sfaccount, sf_volume_id, endpoint=None):
         """Gets the connection info for specified account and volume."""
@@ -1006,6 +1009,8 @@ class SolidFireDriver(san.SanISCSIDriver):
             tvol['provider_location'] = template_vol['provider_location']
             tvol['provider_auth'] = template_vol['provider_auth']
 
+            attach_info = None
+
             try:
                 connector = {'multipath': False}
                 conn = self.initialize_connection(tvol, connector)
@@ -1032,7 +1037,8 @@ class SolidFireDriver(san.SanISCSIDriver):
                           exc)
                 LOG.debug('Removing SolidFire Cache Volume (SF ID): %s',
                           vol['volumeID'])
-                self._detach_volume(context, attach_info, tvol, properties)
+                if attach_info is not None:
+                    self._detach_volume(context, attach_info, tvol, properties)
                 self._issue_api_request('DeleteVolume', params)
                 self._issue_api_request('PurgeDeletedVolume', params)
                 return
@@ -1363,7 +1369,7 @@ class SolidFireDriver(san.SanISCSIDriver):
         if volume['volume_type_id']:
             for setting in self._extract_sf_attributes_from_extra_specs(
                     volume['volume_type_id']):
-                for k, v in setting.iteritems():
+                for k, v in setting.items():
                     attributes[k] = v
 
         vname = '%s%s' % (self.configuration.sf_volume_prefix, volume['id'])
@@ -1826,6 +1832,13 @@ class SolidFireDriver(san.SanISCSIDriver):
         snap_name = self.configuration.sf_volume_prefix + cgsnapshot['id']
         self._delete_cgsnapshot_by_name(snap_name)
         return None, None
+
+    def delete_group_snapshot(self, context, group_snapshot, snapshots):
+        if vol_utils.is_group_a_cg_snapshot_type(group_snapshot):
+            return self._delete_cgsnapshot(context, group_snapshot, snapshots)
+
+        # Default implementation handles other scenarios.
+        raise NotImplementedError()
 
     def _delete_consistencygroup(self, ctxt, group, volumes):
         # TODO(chris_morrell): exception handling and return correctly updated

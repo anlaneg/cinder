@@ -289,9 +289,6 @@ class API(base.Base):
 
         utils.check_metadata_properties(metadata)
 
-        if (volume_type and self._is_multiattach(volume_type)) or multiattach:
-            context.authorize(vol_policy.MULTIATTACH_POLICY)
-
         create_what = {
             'context': context,
             'raw_size': size,
@@ -308,7 +305,7 @@ class API(base.Base):
             'optional_args': {'is_quota_committed': False},
             'consistencygroup': consistencygroup,
             'cgsnapshot': cgsnapshot,
-            'multiattach': multiattach,
+            'raw_multiattach': multiattach,
             'group': group,
             'group_snapshot': group_snapshot,
             'source_group': source_group,
@@ -349,8 +346,6 @@ class API(base.Base):
                 # Refresh the object here, otherwise things ain't right
                 vref = objects.Volume.get_by_id(
                     context, vref['id'])
-                vref.multiattach = (self._is_multiattach(volume_type) or
-                                    multiattach)
                 vref.save()
                 LOG.info("Create volume request issued successfully.",
                          resource=vref)
@@ -645,8 +640,8 @@ class API(base.Base):
         return volumes
 
     def get_snapshot(self, context, snapshot_id):
-        context.authorize(snapshot_policy.GET_POLICY)
         snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
+        context.authorize(snapshot_policy.GET_POLICY, target_obj=snapshot)
 
         # FIXME(jdg): The objects don't have the db name entries
         # so build the resource tag manually for now.
@@ -656,8 +651,8 @@ class API(base.Base):
         return snapshot
 
     def get_volume(self, context, volume_id):
-        context.authorize(vol_policy.GET_POLICY)
         volume = objects.Volume.get_by_id(context, volume_id)
+        context.authorize(vol_policy.GET_POLICY, target_obj=volume)
         LOG.info("Volume retrieved successfully.", resource=volume)
         return volume
 
@@ -820,7 +815,8 @@ class API(base.Base):
                  resource=volume)
         self.unreserve_volume(context, volume)
 
-    def accept_transfer(self, context, volume, new_user, new_project):
+    def accept_transfer(self, context, volume, new_user, new_project,
+                        no_snapshots=False):
         context.authorize(vol_transfer_policy.ACCEPT_POLICY,
                           target_obj=volume)
         if volume['status'] == 'maintenance':
@@ -831,7 +827,8 @@ class API(base.Base):
         results = self.volume_rpcapi.accept_transfer(context,
                                                      volume,
                                                      new_user,
-                                                     new_project)
+                                                     new_project,
+                                                     no_snapshots=no_snapshots)
         LOG.info("Transfer volume completed successfully.",
                  resource=volume)
         return results
@@ -863,29 +860,9 @@ class API(base.Base):
                               cgsnapshot_id,
                               commit_quota=True,
                               group_snapshot_id=None):
-        context.authorize(snapshot_policy.CREATE_POLICY)
+        self._create_snapshot_in_db_validate(context, volume)
 
         utils.check_metadata_properties(metadata)
-        if not volume.host:
-            msg = _("The snapshot cannot be created because volume has "
-                    "not been scheduled to any host.")
-            raise exception.InvalidVolume(reason=msg)
-
-        if volume['status'] == 'maintenance':
-            LOG.info('Unable to create the snapshot for volume, '
-                     'because it is in maintenance.', resource=volume)
-            msg = _("The snapshot cannot be created when the volume is in "
-                    "maintenance mode.")
-            raise exception.InvalidVolume(reason=msg)
-        if self._is_volume_migrating(volume):
-            # Volume is migrating, wait until done
-            msg = _("Snapshot cannot be created while volume is migrating.")
-            raise exception.InvalidVolume(reason=msg)
-
-        if volume['status'].startswith('replica_'):
-            # Can't snapshot secondary replica
-            msg = _("Snapshot of secondary replica is not allowed.")
-            raise exception.InvalidVolume(reason=msg)
 
         valid_status = ["available", "in-use"] if force else ["available"]
 
@@ -996,6 +973,10 @@ class API(base.Base):
     def _create_snapshot_in_db_validate(self, context, volume):
         context.authorize(snapshot_policy.CREATE_POLICY, target_obj=volume)
 
+        if not volume.host:
+            msg = _("The snapshot cannot be created because volume has "
+                    "not been scheduled to any host.")
+            raise exception.InvalidVolume(reason=msg)
         if volume['status'] == 'maintenance':
             LOG.info('Unable to create the snapshot for volume, '
                      'because it is in maintenance.', resource=volume)
@@ -1010,6 +991,10 @@ class API(base.Base):
             msg = _("The snapshot cannot be created when the volume is "
                     "in error status.")
             LOG.error(msg)
+            raise exception.InvalidVolume(reason=msg)
+        if volume['status'].startswith('replica_'):
+            # Can't snapshot secondary replica
+            msg = _("Snapshot of secondary replica is not allowed.")
             raise exception.InvalidVolume(reason=msg)
 
     def _create_snapshots_in_db_reserve(self, context, volume_list):
@@ -1156,7 +1141,6 @@ class API(base.Base):
                     '%s status.') % volume['status']
             LOG.info(msg, resource=volume)
             raise exception.InvalidVolume(reason=msg)
-        utils.check_metadata_properties(metadata)
         return self.db.volume_metadata_update(context, volume['id'],
                                               metadata, delete, meta_type)
 
@@ -1254,8 +1238,6 @@ class API(base.Base):
     def get_snapshot_metadata_value(self, snapshot, key):
         LOG.info("Get snapshot metadata value not implemented.",
                  resource=snapshot)
-        # FIXME(jdg): Huh?  Pass?
-        pass
 
     def get_volumes_image_metadata(self, context):
         context.authorize(vol_meta_policy.GET_POLICY)
@@ -1615,11 +1597,6 @@ class API(base.Base):
     def retype(self, context, volume, new_type, migration_policy=None):
         """Attempt to modify the type associated with an existing volume."""
         context.authorize(vol_action_policy.RETYPE_POLICY, target_obj=volume)
-        if migration_policy and migration_policy not in ('on-demand', 'never'):
-            msg = _('migration_policy must be \'on-demand\' or \'never\', '
-                    'passed: %s') % new_type
-            LOG.error(msg)
-            raise exception.InvalidInput(reason=msg)
 
         # Support specifying volume type by ID or name
         try:
@@ -1657,7 +1634,8 @@ class API(base.Base):
             # If they are retyping to a multiattach capable, make sure they
             # are allowed to do so.
             if tgt_is_multiattach:
-                context.authorize(vol_policy.MULTIATTACH_POLICY)
+                context.authorize(vol_policy.MULTIATTACH_POLICY,
+                                  target_obj=volume)
 
         # We're checking here in so that we can report any quota issues as
         # early as possible, but won't commit until we change the type. We
@@ -1718,6 +1696,11 @@ class API(base.Base):
                         'migration_policy': migration_policy,
                         'quota_reservations': reservations,
                         'old_reservations': old_reservations}
+
+        type_azs = volume_utils.extract_availability_zones_from_volume_type(
+            new_type)
+        if type_azs is not None:
+            request_spec['availability_zones'] = type_azs
 
         self.scheduler_rpcapi.retype(context, volume,
                                      request_spec=request_spec,
@@ -2071,7 +2054,8 @@ class API(base.Base):
                 vref.status == 'in-use' and
                 vref.bootable):
             ctxt.authorize(
-                attachment_policy.MULTIATTACH_BOOTABLE_VOLUME_POLICY)
+                attachment_policy.MULTIATTACH_BOOTABLE_VOLUME_POLICY,
+                target_obj=vref)
 
         # FIXME(JDG):  We want to be able to do things here like reserve a
         # volume for Nova to do BFV WHILE the volume may be in the process of
@@ -2088,14 +2072,19 @@ class API(base.Base):
         result = vref.conditional_update({'status': 'reserved'}, expected)
 
         if not result:
-            # Make sure we're not going to the same instance, in which case
-            # it could be a live-migrate or similar scenario (LP BUG: 1694530)
             override = False
             if instance_uuid:
-                override = True
+                # Refresh the volume reference in case multiple instances were
+                # being concurrently attached to the same non-multiattach
+                # volume.
+                vref = objects.Volume.get_by_id(ctxt, vref.id)
                 for attachment in vref.volume_attachment:
-                    if attachment.instance_uuid != instance_uuid:
-                        override = False
+                    # If we're attaching the same volume to the same instance,
+                    # we could be migrating the instance to another host in
+                    # which case we want to allow the reservation.
+                    # (LP BUG: 1694530)
+                    if attachment.instance_uuid == instance_uuid:
+                        override = True
                         break
 
             if not override:
@@ -2115,7 +2104,8 @@ class API(base.Base):
                           ctxt,
                           volume_ref,
                           instance_uuid,
-                          connector=None):
+                          connector=None,
+                          attach_mode='null'):
         """Create an attachment record for the specified volume."""
         ctxt.authorize(attachment_policy.CREATE_POLICY, target_obj=volume_ref)
         connection_info = {}
@@ -2129,10 +2119,23 @@ class API(base.Base):
                                                      connector,
                                                      attachment_ref.id))
         attachment_ref.connection_info = connection_info
+
+        # Use of admin_metadata for RO settings is deprecated
+        # switch to using mode argument to attachment-create
         if self.db.volume_admin_metadata_get(
                 ctxt.elevated(),
                 volume_ref['id']).get('readonly', False):
+            LOG.warning("Using volume_admin_metadata to set "
+                        "Read Only mode is deprecated!  Please "
+                        "use the mode argument in attachment-create.")
             attachment_ref.attach_mode = 'ro'
+            # for now we have to let the admin_metadata override
+            # so we're using an else in the next step here, in
+            # other words, using volume_admin_metadata and mode params
+            # are NOT compatible
+        else:
+            attachment_ref.attach_mode = attach_mode
+
         attachment_ref.save()
         return attachment_ref
 
@@ -2163,7 +2166,7 @@ class API(base.Base):
         ctxt.authorize(attachment_policy.DELETE_POLICY,
                        target_obj=attachment)
         volume = objects.Volume.get_by_id(ctxt, attachment.volume_id)
-        if attachment.attach_status == 'reserved':
+        if attachment.attach_status == fields.VolumeAttachStatus.RESERVED:
             self.db.volume_detached(ctxt.elevated(), attachment.volume_id,
                                     attachment.get('id'))
             self.db.volume_admin_metadata_delete(ctxt.elevated(),

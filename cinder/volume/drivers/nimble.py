@@ -216,8 +216,13 @@ class NimbleBaseVolumeDriver(san.SanDriver):
         eventlet.sleep(DEFAULT_SLEEP)
         self.APIExecutor.online_vol(volume['name'], False)
         LOG.debug("Deleting volume %(vol)s", {'vol': volume['name']})
-        try:
+
+        @utils.retry(NimbleAPIException, retries=3)
+        def _retry_remove_vol(volume):
             self.APIExecutor.delete_vol(volume['name'])
+
+        try:
+            _retry_remove_vol(volume)
         except NimbleAPIException as ex:
             LOG.debug("delete volume exception: %s", ex)
             if SM_OBJ_HAS_CLONE in six.text_type(ex):
@@ -347,7 +352,7 @@ class NimbleBaseVolumeDriver(san.SanDriver):
                                   'ip': self.configuration.san_ip})
             else:
                 raise NimbleAPIException(_("Unable to get current software "
-                                           "version for %s"),
+                                           "version for %s") %
                                          self.configuration.san_ip)
 
     def get_volume_stats(self, refresh=False):
@@ -860,7 +865,6 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
 
         return init_targ_map
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Driver entry point to attach a volume to an instance."""
         LOG.info('Entering initialize_connection volume=%(vol)s'
@@ -899,10 +903,9 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
 
         LOG.info("Return FC data for zone addition: %(data)s.",
                  {'data': data})
-
+        fczm_utils.add_fc_zone(data)
         return data
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Driver entry point to unattach a volume from an instance."""
         LOG.info('Entering terminate_connection volume=%(vol)s'
@@ -934,6 +937,10 @@ class NimbleFCDriver(NimbleBaseVolumeDriver, driver.FibreChannelDriver):
         data = {'driver_volume_type': 'fibre_channel',
                 'data': {'target_wwn': target_wwns}}
 
+        # FIXME: need to optionally add the initiator_target_map here when
+        # there are no more volumes exported to the initiator / target pair
+        # otherwise the zone will never get removed.
+        fczm_utils.remove_fc_zone(data)
         return data
 
     def get_wwpns_from_array(self, array_name):
@@ -1045,7 +1052,7 @@ class NimbleRestAPIExecutor(object):
         LOG.debug("Performance policy Name %s", perf_policy_name)
         r = self.get_query(api, filter)
         if not r.json()['data']:
-            raise NimbleAPIException(_("No performance policy found for:"
+            raise NimbleAPIException(_("No performance policy found for: "
                                      "%(perf)s") % {'perf': perf_policy_name})
         LOG.debug("Performance policy ID :%(perf)s",
                   {'perf': r.json()['data'][0]['id']})
@@ -1655,7 +1662,7 @@ class NimbleRestAPIExecutor(object):
     def get_query(self, api, query):
         url = self.uri + api
         return requests.get(url, headers=self.headers,
-                            params=query, verify=False)
+                            params=query, verify=self.verify)
 
     @_connection_checker
     def put(self, api, payload):

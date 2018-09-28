@@ -123,6 +123,8 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
         4.0.1 - Update CHAP on host record when volume is migrated
                 to new compute host. bug # 1737181
         4.0.2 - Handle force detach case. bug #1686745
+        4.0.3 - Set proper backend on subsequent operation, after group
+                failover. bug #1773069
 
     """
 
@@ -197,7 +199,7 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
                         "target_ip_address '%s.'",
                         (", ".join(temp_iscsi_ip)))
 
-        if not len(iscsi_ip_list) > 0:
+        if not len(iscsi_ip_list):
             msg = _('At least one valid iSCSI IP address must be set.')
             LOG.error(msg)
             raise exception.InvalidInput(reason=msg)
@@ -232,7 +234,8 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
           * Create a host on the 3par
           * create vlun on the 3par
         """
-        common = self._login()
+        array_id = self.get_volume_replication_driver_data(volume)
+        common = self._login(array_id=array_id)
         try:
             # If the volume has been failed over, we need to reinitialize
             # iSCSI ports so they represent the new array.
@@ -363,7 +366,8 @@ class HPE3PARISCSIDriver(hpebasedriver.HPE3PARDriverBase):
     @utils.trace
     def terminate_connection(self, volume, connector, **kwargs):
         """Driver entry point to unattach a volume from an instance."""
-        common = self._login()
+        array_id = self.get_volume_replication_driver_data(volume)
+        common = self._login(array_id=array_id)
         try:
             is_force_detach = connector is None
             if is_force_detach:

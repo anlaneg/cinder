@@ -36,6 +36,7 @@ from cinder import context
 from cinder import coordination
 from cinder import db
 from cinder import exception
+from cinder.message import message_field
 from cinder import objects
 from cinder.objects import fields
 from cinder.policies import volumes as vol_policy
@@ -679,6 +680,38 @@ class VolumeTestCase(base.BaseVolumeTestCase):
             self.assertRaises(exception.PolicyNotAuthorized,
                               volume_api.create, self.context, 1, 'name',
                               'description', multiattach=True)
+
+    @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
+    def test_create_volume_with_encrypted_volume_type_multiattach(self):
+        ctxt = context.get_admin_context()
+
+        cipher = 'aes-xts-plain64'
+        key_size = 256
+        control_location = 'front-end'
+
+        db.volume_type_create(ctxt,
+                              {'id': '61298380-0c12-11e3-bfd6-4b48424183be',
+                               'name': 'LUKS',
+                               'extra_specs': {'multiattach': '<is> True'}})
+        db.volume_type_encryption_create(
+            ctxt,
+            '61298380-0c12-11e3-bfd6-4b48424183be',
+            {'control_location': control_location,
+             'provider': ENCRYPTION_PROVIDER,
+             'cipher': cipher,
+             'key_size': key_size})
+
+        volume_api = cinder.volume.api.API()
+
+        db_vol_type = db.volume_type_get_by_name(ctxt, 'LUKS')
+
+        self.assertRaises(exception.InvalidVolume,
+                          volume_api.create,
+                          self.context,
+                          1,
+                          'name',
+                          'description',
+                          volume_type=db_vol_type)
 
     @mock.patch.object(key_manager, 'API', fake_keymgr.fake_api)
     def test_create_volume_with_encrypted_volume_type_aes(self):
@@ -1804,6 +1837,46 @@ class VolumeTestCase(base.BaseVolumeTestCase):
 
         self.assertEqual(attachment.attach_status, 'reserved')
 
+    def test_attachment_reserve_conditional_update_attach_race(self):
+        # Tests a scenario where two instances are racing to attach the
+        # same multiattach=False volume. One updates the volume status to
+        # "reserved" but the other fails the conditional update which is
+        # then validated to not be the same instance that is already attached
+        # to the multiattach=False volume which triggers a failure.
+        volume = tests_utils.create_volume(self.context)
+        # Assert that we're not dealing with a multiattach volume and that
+        # it does not have any existing attachments.
+        self.assertFalse(volume.multiattach)
+        self.assertEqual(0, len(volume.volume_attachment))
+        # Attach the first instance which is OK and should update the volume
+        # status to 'reserved'.
+        self.volume_api._attachment_reserve(self.context, volume, fake.UUID1)
+        # Try attaching a different instance to the same volume which should
+        # fail.
+        ex = self.assertRaises(exception.InvalidVolume,
+                               self.volume_api._attachment_reserve,
+                               self.context, volume, fake.UUID2)
+        self.assertIn("status must be available or downloading",
+                      six.text_type(ex))
+
+    def test_attachment_reserve_with_instance_uuid_error_volume(self):
+        # Tests that trying to create an attachment (with an instance_uuid
+        # provided) on a volume that's not 'available' or 'downloading' status
+        # will fail if the volume does not have any attachments, similar to how
+        # the volume reserve action works.
+        volume = tests_utils.create_volume(self.context, status='error')
+        # Assert that we're not dealing with a multiattach volume and that
+        # it does not have any existing attachments.
+        self.assertFalse(volume.multiattach)
+        self.assertEqual(0, len(volume.volume_attachment))
+        # Try attaching an instance to the volume which should fail based on
+        # the volume status.
+        ex = self.assertRaises(exception.InvalidVolume,
+                               self.volume_api._attachment_reserve,
+                               self.context, volume, fake.UUID1)
+        self.assertIn("status must be available or downloading",
+                      six.text_type(ex))
+
     def test_unreserve_volume_success_in_use(self):
         UUID = six.text_type(uuid.uuid4())
         volume = tests_utils.create_volume(self.context, status='attaching')
@@ -2387,16 +2460,22 @@ class VolumeTestCase(base.BaseVolumeTestCase):
         fake_reservations = ['RESERVATION']
 
         # Test driver exception
-        with mock.patch.object(self.volume.driver,
-                               'extend_volume') as extend_volume:
-            extend_volume.side_effect =\
-                exception.CinderException('fake exception')
-            volume['status'] = 'extending'
-            self.volume.extend_volume(self.context, volume, '4',
-                                      fake_reservations)
-            volume.refresh()
-            self.assertEqual(2, volume.size)
-            self.assertEqual('error_extending', volume.status)
+        with mock.patch.object(
+                self.volume.driver, 'extend_volume',
+                side_effect=exception.CinderException('fake exception')):
+            with mock.patch.object(
+                    self.volume.message_api, 'create') as mock_create:
+                volume['status'] = 'extending'
+                self.volume.extend_volume(self.context, volume, '4',
+                                          fake_reservations)
+                volume.refresh()
+                self.assertEqual(2, volume.size)
+                self.assertEqual('error_extending', volume.status)
+                mock_create.assert_called_once_with(
+                    self.context,
+                    message_field.Action.EXTEND_VOLUME,
+                    resource_uuid=volume.id,
+                    detail=message_field.Detail.DRIVER_FAILED_EXTEND)
 
     @mock.patch('cinder.compute.API')
     def _test_extend_volume_manager_successful(self, volume, nova_api):

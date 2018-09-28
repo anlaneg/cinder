@@ -24,6 +24,8 @@ import unicodedata
 
 import six
 
+from cinder.common import constants
+
 
 def _is_printable(char):
     """determine if a unicode code point is printable.
@@ -153,6 +155,17 @@ extra_specs = {
 }
 
 
+extra_specs_with_no_spaces_key = {
+    'type': 'object',
+    'patternProperties': {
+        '^[a-zA-Z0-9-_:.]{1,255}$': {
+            'type': ['string', 'null'], 'minLength': 0, 'maxLength': 255
+        }
+    },
+    'additionalProperties': False
+}
+
+
 group_snapshot_status = {
     'type': 'string', 'format': 'group_snapshot_status'
 }
@@ -169,7 +182,7 @@ name_allow_zero_min_length = {
 
 
 uuid_allow_null = {
-    'type': ['string', 'null']
+    'oneOf': [uuid, {'type': 'null'}]
 }
 
 
@@ -185,3 +198,78 @@ backup_url = {'type': 'string', 'minLength': 1, 'format': 'base64'}
 
 
 backup_service = {'type': 'string', 'minLength': 0, 'maxLength': 255}
+
+
+nullable_string = {
+    'type': ('string', 'null'), 'minLength': 0, 'maxLength': 255
+}
+
+
+volume_size = {
+    'type': ['integer', 'string'],
+    'pattern': '^[0-9]+$',
+    'minimum': 1,
+    'maximum': constants.DB_MAX_INT
+}
+volume_size_allows_null = copy.deepcopy(volume_size)
+volume_size_allows_null['type'] += ['null']
+
+
+hostname = {
+    'type': ['string', 'null'], 'minLength': 1, 'maxLength': 255,
+    # NOTE: 'host' is defined in "services" table, and that
+    # means a hostname. The hostname grammar in RFC952 does
+    # not allow for underscores in hostnames. However, this
+    # schema allows them, because it sometimes occurs in
+    # real systems. As it is a cinder host, not a hostname,
+    # and due to some driver needs, colons and forward slashes
+    # were also included in the regex.
+    'pattern': '^[a-zA-Z0-9-._#@:/+]*$'
+}
+
+
+resource_type = {'type': ['string', 'null'], 'minLength': 0, 'maxLength': 40}
+
+
+service_id = {
+    'type': ['integer', 'string', 'null'],
+    'pattern': '^[0-9]*$', 'maxLength': 11
+}
+
+
+optional_uuid = {'oneOf': [{'type': 'null'},
+                           {'type': 'string', 'format': 'uuid'}]}
+
+
+quota_class_set = {
+    'type': 'object',
+    'format': 'quota_class_set',
+    'patternProperties': {
+        '^[a-zA-Z0-9-_:. ]{1,255}$': {
+            'type': ['integer', 'string'],
+            'pattern': '^[0-9]*$', 'minimum': -1, 'minLength': 1,
+            'maximum': constants.DB_MAX_INT
+        }
+    },
+    'additionalProperties': False
+}
+
+
+binary = {
+    'type': 'string',
+    'enum': [binary for binary in constants.LOG_BINARIES + ('', '*')]
+}
+
+
+key_size = {'type': ['string', 'integer', 'null'],
+            'minimum': 0,
+            'maximum': constants.DB_MAX_INT,
+            'format': 'key_size'}
+
+
+availability_zone = {
+    'type': ['string', 'null'], 'minLength': 1, 'maxLength': 255
+}
+
+
+optional_boolean = {'oneOf': [{'type': 'null'}, boolean]}

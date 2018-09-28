@@ -55,6 +55,18 @@ Core Functionality
 * Clone Volume
 * Extend Volume
 
+Security Requirements
+---------------------
+
+* Drivers must delete volumes in a way where volumes deleted from the backend
+  will not leak data into new volumes when they are created.  Cinder operates
+  in multi-tenant environments and this is critical to ensure data safety.
+* Drivers should support secure TLS/SSL communication between the cinder
+  volume service and the backend as configured by the "driver_ssl_cert_verify"
+  and "driver_ssl_cert_path" options in cinder.conf.
+* Drivers should use standard Python libraries to handle encryption-related
+  functionality, and not contain custom implementations of encryption code.
+
 Volume Stats
 ------------
 
@@ -74,6 +86,11 @@ total_capacity_gb, keywords can be provided instead. Please use 'unknown' if
 the backend cannot report the value or 'infinite' if the backend has no upper
 limit. But, it is recommended to report real values as the Cinder scheduler
 assigns lowest weight to any storage backend reporting 'unknown' or 'infinite'.
+
+**NOTE:** By default, Cinder assumes that the driver supports attached volume
+extending. If it doesn't, it should report 'online_extend_support=False'.
+Otherwise the scheduler will attempt to perform the operation, and may leave
+the volume in 'error_extending' state.
 
 Feature Enforcement
 -------------------
@@ -112,20 +129,6 @@ in order to be an official Cinder volume driver.
 .. automodule:: cinder.interface.volume_driver
   :members:
   :noindex:
-
-Snapshot Interface
-``````````````````
-Another required interface for a volume driver to be fully compatible is the
-ability to create and manage snapshots. Due to legacy constraints, this
-interface is not included in the base driver interface above.
-
-Work is being done to address those legacy issues. Once that is complete, this
-interface will be merged with the base driver interface.
-
-.. automodule:: cinder.interface.volume_snapshot_driver
-  :members:
-  :noindex:
-
 
 Manage/Unmanage Support
 ```````````````````````
@@ -171,6 +174,16 @@ consistent group snapshot capability to generic volume groups, we no longer
 need the volume consistency groups interface listed above.
 
 .. automodule:: cinder.interface.volume_group_driver
+  :members:
+  :noindex:
+
+Revert To Snapshot
+``````````````````
+Some storage backends support the ability to revert a volume to the last
+snapshot. To support snapshot revert, the following interface must be
+implemented by the driver.
+
+.. automodule:: cinder.interface.volume_snapshot_revert
   :members:
   :noindex:
 

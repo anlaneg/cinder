@@ -42,17 +42,10 @@ import re
 import six
 import uuid
 
-from oslo_serialization import base64
-from oslo_utils import importutils
-
-hpe3parclient = importutils.try_import("hpe3parclient")
-if hpe3parclient:
-    from hpe3parclient import client
-    from hpe3parclient import exceptions as hpeexceptions
-
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_log import versionutils
+from oslo_serialization import base64
 from oslo_service import loopingcall
 from oslo_utils import excutils
 from oslo_utils import units
@@ -62,6 +55,7 @@ from cinder import exception
 from cinder import flow_utils
 from cinder.i18n import _
 from cinder.objects import fields
+from cinder import utils
 from cinder.volume import configuration
 from cinder.volume import qos_specs
 from cinder.volume import utils as volume_utils
@@ -69,6 +63,15 @@ from cinder.volume import volume_types
 
 import taskflow.engines
 from taskflow.patterns import linear_flow
+
+try:
+    import hpe3parclient
+    from hpe3parclient import client
+    from hpe3parclient import exceptions as hpeexceptions
+except ImportError:
+    hpe3parclient = None
+    client = None
+    hpeexceptions = None
 
 LOG = logging.getLogger(__name__)
 
@@ -266,11 +269,15 @@ class HPE3PARCommon(object):
                 extra-specs. bug #1744025
         4.0.6 - Monitor task of promoting a virtual copy. bug #1749642
         4.0.7 - Handle force detach case. bug #1686745
+        4.0.8 - Added support for report backend state in service list.
+        4.0.9 - Set proper backend on subsequent operation, after group
+                failover. bug #1773069
+        4.0.10 - Added retry in delete_volume. bug #1783934
 
 
     """
 
-    VERSION = "4.0.7"
+    VERSION = "4.0.10"
 
     stats = {}
 
@@ -429,7 +436,7 @@ class HPE3PARCommon(object):
         if client is not None:
             client.logout()
 
-    def do_setup(self, context, timeout=None, stats=None):
+    def do_setup(self, context, timeout=None, stats=None, array_id=None):
         if hpe3parclient is None:
             msg = _('You must install hpe3parclient before using 3PAR'
                     ' drivers. Run "pip install python-3parclient" to'
@@ -441,7 +448,7 @@ class HPE3PARCommon(object):
             # to communicate with the 3PAR array. It will contain either
             # the values for the primary array or secondary array in the
             # case of a fail-over.
-            self._get_3par_config()
+            self._get_3par_config(array_id=array_id)
             self.client = self._create_client(timeout=timeout)
             wsapi_version = self.client.getWsApiVersion()
             self.API_VERSION = wsapi_version['build']
@@ -460,7 +467,7 @@ class HPE3PARCommon(object):
         except hpeexceptions.UnsupportedVersion as ex:
             # In the event we cannot contact the configured primary array,
             # we want to allow a failover if replication is enabled.
-            self._do_replication_setup()
+            self._do_replication_setup(array_id=array_id)
             if self._replication_enabled:
                 self.client = None
             raise exception.InvalidInput(ex)
@@ -496,6 +503,12 @@ class HPE3PARCommon(object):
             self.client.id = stats['array_id']
 
     def check_for_setup_error(self):
+        """Verify that requirements are in place to use HPE driver."""
+        if not all((hpe3parclient, client, hpeexceptions)):
+            msg = _('HPE driver setup error: some required '
+                    'libraries (hpe3parclient, client.*) not found.')
+            LOG.error(msg)
+            raise exception.VolumeDriverException(message=msg)
         if self.client:
             self.client_login()
             try:
@@ -1472,7 +1485,15 @@ class HPE3PARCommon(object):
         # set in the child classes
 
         pools = []
-        info = self.client.getStorageSystemInfo()
+        try:
+            info = self.client.getStorageSystemInfo()
+            backend_state = 'up'
+        except Exception as ex:
+            info = {}
+            backend_state = 'down'
+            LOG.warning("Exception at getStorageSystemInfo() "
+                        "Reason: '%(reason)s'", {'reason': ex})
+
         qos_support = True
         thin_support = True
         remotecopy_support = True
@@ -1572,7 +1593,7 @@ class HPE3PARCommon(object):
                     'reserved_percentage': (
                         self.config.safe_get('reserved_percentage')),
                     'location_info': ('HPE3PARDriver:%(sys_id)s:%(dest_cpg)s' %
-                                      {'sys_id': info['serialNumber'],
+                                      {'sys_id': info.get('serialNumber'),
                                        'dest_cpg': cpg_name}),
                     'total_volumes': total_volumes,
                     'capacity_utilization': capacity_utilization,
@@ -1588,7 +1609,8 @@ class HPE3PARCommon(object):
                     'consistent_group_snapshot_enabled': True,
                     'compression': compression_support,
                     'consistent_group_replication_enabled':
-                        self._replication_enabled
+                        self._replication_enabled,
+                    'backend_state': backend_state
                     }
 
             if remotecopy_support:
@@ -1598,11 +1620,11 @@ class HPE3PARCommon(object):
 
             pools.append(pool)
 
-        self.stats = {'driver_version': '3.0',
+        self.stats = {'driver_version': '4.0',
                       'storage_protocol': None,
                       'vendor_name': 'Hewlett Packard Enterprise',
                       'volume_backend_name': None,
-                      'array_id': info['id'],
+                      'array_id': info.get('id'),
                       'replication_enabled': self._replication_enabled,
                       'replication_targets': self._get_replication_targets(),
                       'pools': pools}
@@ -1704,7 +1726,6 @@ class HPE3PARCommon(object):
             vluns = self.client.getHostVLUNs(hostname)
         except hpeexceptions.HTTPNotFound:
             LOG.debug("All VLUNs removed from host %s", hostname)
-            pass
 
         if wwn is not None and not isinstance(wwn, list):
             wwn = [wwn]
@@ -2453,6 +2474,17 @@ class HPE3PARCommon(object):
             raise exception.CinderException(ex)
 
     def delete_volume(self, volume):
+
+        @utils.retry(exception.VolumeIsBusy, interval=2, retries=10)
+        def _try_remove_volume(volume_name):
+            try:
+                self.client.deleteVolume(volume_name)
+            except Exception:
+                msg = _("The volume is currently busy on the 3PAR "
+                        "and cannot be deleted at this time. "
+                        "You can try again later.")
+                raise exception.VolumeIsBusy(message=msg)
+
         # v2 replication check
         # If the volume type is replication enabled, we want to call our own
         # method of deconstructing the volume and its dependencies
@@ -2503,13 +2535,7 @@ class HPE3PARCommon(object):
                     else:
                         # the volume is being operated on in a background
                         # task on the 3PAR.
-                        # TODO(walter-boring) do a retry a few times.
-                        # for now lets log a better message
-                        msg = _("The volume is currently busy on the 3PAR"
-                                " and cannot be deleted at this time. "
-                                "You can try again later.")
-                        LOG.error(msg)
-                        raise exception.VolumeIsBusy(message=msg)
+                        _try_remove_volume(volume_name)
                 elif (ex.get_code() == 32):
                     # Error 32 means that the volume has children
 
@@ -3388,7 +3414,6 @@ class HPE3PARCommon(object):
                       "combination: %(host)s, %(vol)s",
                       {'host': host['name'],
                        'vol': vol_name})
-            pass
         return existing_vlun
 
     def find_existing_vluns(self, volume, host):
@@ -3406,7 +3431,6 @@ class HPE3PARCommon(object):
                       "combination: %(host)s, %(vol)s",
                       {'host': host['name'],
                        'vol': vol_name})
-            pass
         return existing_vluns
 
     # v2 replication methods
@@ -3581,7 +3605,7 @@ class HPE3PARCommon(object):
 
         return True
 
-    def _do_replication_setup(self):
+    def _do_replication_setup(self, array_id=None):
         replication_targets = []
         replication_devices = self.config.replication_device
         if replication_devices:
@@ -3614,8 +3638,11 @@ class HPE3PARCommon(object):
                 cl = None
                 try:
                     cl = self._create_replication_client(remote_array)
-                    array_id = six.text_type(cl.getStorageSystemInfo()['id'])
-                    remote_array['id'] = array_id
+                    info = cl.getStorageSystemInfo()
+                    remote_array['id'] = six.text_type(info['id'])
+                    if array_id and array_id == info['id']:
+                        self._active_backend_id = six.text_type(info['name'])
+
                     wsapi_version = cl.getWsApiVersion()['build']
 
                     if wsapi_version < REMOTE_COPY_API_VERSION:
@@ -3769,8 +3796,8 @@ class HPE3PARCommon(object):
             ret_mode = self.PERIODIC
         return ret_mode
 
-    def _get_3par_config(self):
-        self._do_replication_setup()
+    def _get_3par_config(self, array_id=None):
+        self._do_replication_setup(array_id=array_id)
         conf = None
         if self._replication_enabled:
             for target in self._replication_targets:

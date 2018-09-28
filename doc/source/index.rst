@@ -60,11 +60,7 @@ Configuration Reference
     :maxdepth: 2
 
     configuration/index
-
-    Sample Configuration File <sample_config>
-
-    Sample Policy File <sample_policy>
-
+    reference/support-matrix
     drivers
 
 CLI Reference

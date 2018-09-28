@@ -113,7 +113,7 @@ CONF.register_opts(disco_opts, group=configuration.SHARED_CONF_GROUP)
 class DiscoDriver(driver.VolumeDriver):
     """Execute commands related to DISCO Volumes.
 
-    .. code:: text
+    .. code-block:: text
 
       Version history:
           1.0 - disco volume driver using SOAP
@@ -124,6 +124,9 @@ class DiscoDriver(driver.VolumeDriver):
 
     VERSION = "1.1"
     CI_WIKI_NAME = "ITRI_DISCO_CI"
+
+    # TODO(jsbryant) Remove driver in Stein if CI is not fixed
+    SUPPORTED = False
 
     def __init__(self, *args, **kwargs):
         """Init Disco driver : get configuration, create client."""

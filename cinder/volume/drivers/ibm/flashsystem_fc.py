@@ -35,23 +35,13 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import interface
 from cinder import utils
-from cinder.volume import configuration
 from cinder.volume.drivers.ibm import flashsystem_common as fscommon
 from cinder.volume.drivers.san import san
 from cinder.zonemanager import utils as fczm_utils
 
 LOG = logging.getLogger(__name__)
 
-flashsystem_fc_opts = [
-    cfg.BoolOpt('flashsystem_multipath_enabled',
-                default=False,
-                help='This option no longer has any affect. It is deprecated '
-                     'and will be removed in the next release.',
-                deprecated_for_removal=True)
-]
-
 CONF = cfg.CONF
-CONF.register_opts(flashsystem_fc_opts, group=configuration.SHARED_CONF_GROUP)
 
 
 @interface.volumedriver
@@ -92,7 +82,6 @@ class FlashSystemFCDriver(fscommon.FlashSystemDriver):
     def __init__(self, *args, **kwargs):
         super(FlashSystemFCDriver, self).__init__(*args, **kwargs)
         self.configuration.append_config_values(fscommon.flashsystem_opts)
-        self.configuration.append_config_values(flashsystem_fc_opts)
         self.configuration.append_config_values(san.san_opts)
 
     def _check_vdisk_params(self, params):
@@ -259,7 +248,6 @@ class FlashSystemFCDriver(fscommon.FlashSystemDriver):
 
         return {'driver_volume_type': type_str, 'data': properties}
 
-    @fczm_utils.add_fc_zone
     @utils.synchronized('flashsystem-init-conn', external=True)
     def initialize_connection(self, volume, connector):
         """Perform work so that an FC connection can be made.
@@ -316,9 +304,9 @@ class FlashSystemFCDriver(fscommon.FlashSystemDriver):
              'conn': connector,
              'prop': properties})
 
+        fczm_utils.add_fc_zone(properties)
         return properties
 
-    @fczm_utils.remove_fc_zone
     @utils.synchronized('flashsystem-term-conn', external=True)
     def terminate_connection(self, volume, connector, **kwargs):
         """Cleanup after connection has been terminated.
@@ -353,6 +341,7 @@ class FlashSystemFCDriver(fscommon.FlashSystemDriver):
                 self._build_initiator_target_map(
                     connector['wwpns'], conn_wwpns))
             return_data['data'] = properties
+            fczm_utils.remove_fc_zone(return_data)
 
         LOG.debug(
             'leave: terminate_connection: volume %(vol)s with '

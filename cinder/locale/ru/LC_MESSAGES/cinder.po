@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-17 00:08+0000\n"
+"POT-Creation-Date: 2018-08-29 01:38+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -21,7 +21,7 @@ msgstr ""
 "%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n"
 "%100>=11 && n%100<=14)? 2 : 3);\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: Russian\n"
 
 #, python-format
@@ -215,9 +215,6 @@ msgstr "Необходимо указать consistencygroup_id"
 msgid "'qemu-img info' parsing failed."
 msgstr "Ошибка анализа 'qemu-img info'."
 
-msgid "'status' must be specified."
-msgstr "Должно быть указано значение status."
-
 #, python-format
 msgid ""
 "(Command: %(cmd)s) (Return Code: %(exit_code)s) (Stdout: %(stdout)s) "
@@ -409,10 +406,6 @@ msgstr "Сбой операции резервного копирования RB
 
 msgid "Backup already exists in database."
 msgstr "Резервная копия уже есть в базе данных."
-
-#, python-format
-msgid "Backup driver reported an error: %(message)s"
-msgstr "Драйвер резервного копирования выдал ошибку: %(message)s"
 
 msgid "Backup id required"
 msgstr "Требуется ИД резервной копии"
@@ -882,10 +875,6 @@ msgstr ""
 msgid "Configuration error: dell_sc_ssn not set."
 msgstr "Ошибка конфигурации: dell_sc_ssn не задан."
 
-#, python-format
-msgid "Configuration file %(configurationFile)s does not exist."
-msgstr "Файл конфигурации %(configurationFile)s не существует."
-
 msgid "Configuration is not found."
 msgstr "Конфигурация не найдена."
 
@@ -1341,9 +1330,6 @@ msgstr "Не найден ожидаемый столбец в %(fun)s: %(hdr)s.
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "Не найден ожидаемый ключ %(key)s в %(fun)s: %(raw)s."
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "Причина выключения содержит неверные символы или слишком длинна"
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "Не найден домен с именем %s."
@@ -1440,10 +1426,6 @@ msgid ""
 msgstr ""
 "Ошибка при добавлении в целевую группу %(targetgroup)s с IQN: %(iqn)s, код "
 "возврата: %(ret.status)d, сообщение: %(ret.data)s."
-
-#, python-format
-msgid "Error Attaching volume %(vol)s."
-msgstr "Ошибка подключения тома %(vol)s."
 
 #, python-format
 msgid ""
@@ -1612,15 +1594,6 @@ msgid ""
 msgstr ""
 "Ошибка получения общего ресурса: %(share)s, пул: %(pool)s, проект: "
 "%(project)s код возврата: %(ret.status)d, сообщение: %(ret.data)s."
-
-#, python-format
-msgid ""
-"Error Getting Snapshot: %(snapshot)s on Volume: %(lun)s to Pool: %(pool)s "
-"Project: %(project)s  Return code: %(ret.status)d Message: %(ret.data)s."
-msgstr ""
-"Ошибка при получении моментальной копии %(snapshot)s, том: %(lun)s, пул: "
-"%(pool)s, проект: %(project)s, код возврата: %(ret.status)d, сообщение: "
-"%(ret.data)s."
 
 #, python-format
 msgid ""
@@ -1852,6 +1825,10 @@ msgstr "Тип ошибки отличается от TypeError."
 msgid "Error renaming volume %(vol)s: %(err)s."
 msgstr "Ошибка переименования тома %(vol)s: %(err)s."
 
+#, python-format
+msgid "Error response: %s"
+msgstr "Сообщение об ошибке: %s"
+
 msgid "Error retrieving volume size"
 msgstr "Ошибка получения размера тома"
 
@@ -2014,13 +1991,6 @@ msgid "Error[status] %(stat)s - [result] %(res)s] while getting volume id."
 msgstr ""
 "Ошибка [состояние] %(stat)s - [результат] %(res)s] при получении ИД тома."
 
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr ""
-"Превышено максимальное число попыток планирования %(max_attempts)d для тома "
-"%(volume_id)s"
-
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "Превышено максимально допустимое число моментальных копий тома"
 
@@ -2085,12 +2055,6 @@ msgstr ""
 
 msgid "Extend volume error."
 msgstr "Ошибка расширения тома."
-
-msgid ""
-"Extend volume is only supported for this driver when no snapshots exist."
-msgstr ""
-"Расширение тома для этого драйвера поддерживается, только когда нет "
-"моментальных копий."
 
 msgid "Extend volume not implemented"
 msgstr "Том расширения не реализован"
@@ -3201,9 +3165,6 @@ msgstr ""
 "Возникла ошибка ImageBusy при удалении тома rbd. Причиной может быть сбой "
 "клиентского соединения. В этом случае повторите удаление через 30 с."
 
-msgid "Incorrect request body format"
-msgstr "Неправильный формат тела запроса"
-
 msgid "Incremental backups exist for this backup."
 msgstr "Для этой резервной копии существует дополняющие резервные копии."
 
@@ -3410,17 +3371,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Недопустимая спецификация QoS: %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr ""
-"Недопустимый запрос на подключение тома к недопустимому целевому объекту"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Недопустимый запрос на подключение тома с недопустимым режимом. Режим "
-"подключения должен быть 'rw' или 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Неверный срок резервирования %(expire)s."
@@ -3464,18 +3414,6 @@ msgstr "Недопустимый параметр обновления: '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Неверное значение '%s' для принудительного применения."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Недопустимое значение для 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Недопустимое значение для 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Недопустимое значение для 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr ""
@@ -3558,13 +3496,6 @@ msgid ""
 msgstr ""
 "Переключение после сбоя невозможно, так как репликация настроена неверно."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Имена ключей могут содержать только алфавитно-цифровые символы, символы "
-"подчеркивания, точки, двоеточия и дефисы."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError: %s"
@@ -3633,9 +3564,6 @@ msgstr "Неправильный запрос url"
 #, python-format
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "Неправильный ответ на команду %(cmd)s: %(reason)s"
-
-msgid "Malformed scheduler_hints attribute"
-msgstr "Неверный формат атрибута scheduler_hints"
 
 #, python-format
 msgid "Malformed show fcns database string: %s"
@@ -3740,15 +3668,8 @@ msgstr ""
 msgid "Missing Fibre Channel SAN configuration param - fc_fabric_names"
 msgstr "Не указан параметр конфигурации SAN Fibre Channel - fc_fabric_names"
 
-msgid "Missing request body"
-msgstr "Отсутствует тело запроса"
-
 msgid "Missing request body."
 msgstr "Отсутствует тело запроса."
-
-#, python-format
-msgid "Missing required element '%s' in request body"
-msgstr "В теле запроса отсутствует обязательный элемент %s."
 
 #, python-format
 msgid "Missing required element '%s' in request body."
@@ -3787,26 +3708,11 @@ msgstr ""
 "Keystone policy.json, где администратору облака предоставлены права на вывод "
 "списка проектов и получение любого проекта."
 
-msgid "Must specify 'connector'"
-msgstr "Необходимо указать 'connector'"
-
-msgid "Must specify 'new_volume'"
-msgstr "Необходимо указать 'new_volume'"
-
-msgid "Must specify 'status'"
-msgstr "Необходимо указать 'status'"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr ""
 "Необходимо указать 'status', 'attach_status' или 'migration_status' для "
 "обновления."
-
-msgid "Must specify a valid attach status"
-msgstr "Необходимо указать допустимое состояние вложения"
-
-msgid "Must specify a valid migration status"
-msgstr "Необходимо указать допустимое состояние переноса"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -3822,17 +3728,8 @@ msgstr ""
 "Необходимо указать допустимый тип предоставления ресурсов %(valid)s, "
 "значение '%(prov)s' недопустимо."
 
-msgid "Must specify a valid status"
-msgstr "Необходимо указать допустимое состояние"
-
 msgid "Must specify an ExtensionManager class"
 msgstr "Необходимо указать класс ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "Необходимо указать загружаемый файл в запросе."
-
-msgid "Must specify readonly in request."
-msgstr "В запросе должен быть указан параметр readonly."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "Необходимо указать source-name или source-id моментальной копии."
@@ -3899,12 +3796,6 @@ msgstr ""
 "Новый размер должен быть больше фактического размера в базовой системе "
 "хранения. Фактический размер: %(oldsize)s, новый размер: %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr "Новый размер тома необходимо указывать в виде целого числа."
-
-msgid "New volume type must be specified."
-msgstr "Должен быть указан тип нового тома."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Новый тип тома не указан в request_spec."
 
@@ -3960,9 +3851,6 @@ msgstr "Не найдены правильные порталы iscsi для %s.
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "В целевом массиве нет портов с поддержкой iSCSI."
-
-msgid "No image_name was specified in request."
-msgstr "В запросе не указан параметр image_name."
 
 msgid "No initiator connected to fabric."
 msgstr "Никакой инициатор не подключен к фабрике."
@@ -4141,9 +4029,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "Необходимо указать путь к сертификату сервера REST."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Укажите имя спецификации QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4398,12 +4283,6 @@ msgstr "Тело запроса и URI не совпадают"
 msgid "Request body contains too many items"
 msgstr "Тело запроса содержит избыточное количество объектов"
 
-msgid "Request body contains too many items."
-msgstr "Тело запроса содержит слишком много элементов."
-
-msgid "Request body empty"
-msgstr "Пустое тело запроса"
-
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
 msgstr ""
@@ -4618,13 +4497,6 @@ msgstr "Размер"
 #, python-format
 msgid "Size for volume: %s not found, cannot secure delete."
 msgstr "Размер для тома %s не найден, защищенное удаление невозможно."
-
-#, python-format
-msgid ""
-"Size is %(image_size)dGB and doesn't fit in a volume of size "
-"%(volume_size)dGB."
-msgstr ""
-"Размер %(image_size)d ГБ не умещается на томе размером %(volume_size)d ГБ."
 
 #, python-format
 msgid ""
@@ -4889,9 +4761,6 @@ msgid ""
 msgstr ""
 "Хост не готов к обратному переключению. Выполните повторную синхронизацию "
 "томов и возобновите репликацию в базовых системах LeftHand."
-
-msgid "The key cannot be None."
-msgstr "Ключ не может быть None."
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "Метод update_migrated_volume не реализован."
@@ -5273,21 +5142,6 @@ msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "Не найден ssh_hosts_key_file: %s"
 
 #, python-format
-msgid ""
-"Unable to find viable pg snapshot to use forfailover on selected secondary "
-"array: %(id)s."
-msgstr ""
-"Не найдена пригодная моментальная копия группы защиты для переключения в "
-"случае сбоя в выбранном вспомогательном массиве: %(id)s."
-
-#, python-format
-msgid ""
-"Unable to find viable secondary array fromconfigured targets: %(targets)s."
-msgstr ""
-"Среди настроенных целевых объектов не найден пригодный вспомогательный "
-"массив: %(targets)s."
-
-#, python-format
 msgid "Unable to find volume %s"
 msgstr "Не найден том %s"
 
@@ -5642,10 +5496,6 @@ msgstr "Набор VV %s не существует."
 #, python-format
 msgid "Valid consumer of QoS specs are: %s"
 msgstr "Допустимый приемник спецификаций QoS: %s"
-
-#, python-format
-msgid "Valid control location are: %s"
-msgstr "Допустимое расположение управления: %s"
 
 #, python-format
 msgid "Validate volume connection failed (error: %(err)s)."
@@ -6582,9 +6432,6 @@ msgstr "consistencygroup присвоена"
 msgid "consistencygroup changed"
 msgstr "consistencygroup изменена"
 
-msgid "control_location must be defined"
-msgstr "Должен быть определен параметр control_location"
-
 msgid "create_cloned_volume, Source Volume does not exist in ETERNUS."
 msgstr "create_cloned_volume, том источника не существует в ETERNUS."
 
@@ -6945,12 +6792,6 @@ msgid "mdiskgrp missing quotes %s"
 msgstr "у mdiskgrp отсутствуют кавычки %s"
 
 #, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr ""
-"Значение migration_policy должно быть on-demand или never, передано значение "
-"%s"
-
-#, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."
 msgstr "Сбой команды mkfs для тома %(vol)s, сообщение об ошибке: %(err)s."
 
@@ -6989,9 +6830,6 @@ msgstr "Параметр open_access_enabled не отключен."
 
 msgid "progress must be an integer percentage"
 msgstr "ход выполнения должен быть целым значением в процентах"
-
-msgid "provider must be defined"
-msgstr "должен быть определен провайдер"
 
 #, python-format
 msgid ""

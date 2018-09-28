@@ -1,21 +1,20 @@
 .. -*- rst -*-
 
-====================================
 Snapshot actions (snapshots, action)
 ====================================
 
 Administrator only. Resets status for a snapshot.
 
 
-Reset a snapshot's status
-=========================
+Reset snapshot's status
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. rest_method::  POST /v2/{project_id}/snapshots/{snapshot_id}/action
 
 Resets the status. Specify the ``os-reset_status`` action in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

@@ -1,9 +1,13 @@
-=================================
-Dell EMC EqualLogic volume driver
-=================================
+=============================================
+Dell EMC PS Series volume driver (Deprecated)
+=============================================
 
-The Dell EqualLogic volume driver interacts with configured EqualLogic
-arrays and supports various operations.
+The Dell PS Series (EqualLogic) volume driver interacts with configured PS
+Series arrays and supports various operations.
+
+.. note::
+   The Dell PS Series volume driver is moving into maintanence mode in S
+   release and will be removed in the T release.
 
 Supported operations
 ~~~~~~~~~~~~~~~~~~~~
@@ -28,7 +32,10 @@ dependent upon the generic block storage driver's SSH settings in the
 ``/etc/cinder/cinder.conf`` file (see
 :ref:`block-storage-sample-configuration-file` for reference).
 
-.. include:: ../../tables/cinder-eqlx.inc
+.. config-table::
+   :config-target: PS Series
+
+   cinder.volume.drivers.dell_emc.ps
 
 Default (single-instance) configuration
 ---------------------------------------

@@ -24,6 +24,7 @@ import itertools
 import random
 import shutil
 import sys
+import textwrap
 import time
 
 import glanceclient.exc
@@ -47,6 +48,27 @@ glance_opts = [
                 help='A list of url schemes that can be downloaded directly '
                      'via the direct_url.  Currently supported schemes: '
                      '[file, cinder].'),
+    cfg.StrOpt('verify_glance_signatures',
+               choices=['disabled', 'enabled'],
+               default='enabled',
+               help=textwrap.dedent(
+                   """
+                   Enable image signature verification.
+
+                   Cinder uses the image signature metadata from Glance and
+                   verifies the signature of a signed image while downloading
+                   that image. There are two options here.
+
+                   1. ``enabled``: verify when image has signature metadata.
+                   2. ``disabled``: verification is turned off.
+
+                   If the image signature cannot be verified or if the image
+                   signature metadata is incomplete when required, then Cinder
+                   will not create the volume and update it into an error
+                   state. This provides end users with stronger assurances
+                   of the integrity of the image data they are using to
+                   create volumes.
+                   """)),
     cfg.StrOpt('glance_catalog_info',
                default='image:glance:publicURL',
                help='Info to match when looking for glance in the service '
@@ -92,14 +114,16 @@ def _create_glance_client(context, netloc, use_ssl):
     if use_ssl and CONF.auth_strategy == 'noauth':
         params = {'insecure': CONF.glance_api_insecure,
                   'cacert': CONF.glance_ca_certificates_file,
-                  'timeout': CONF.glance_request_timeout
+                  'timeout': CONF.glance_request_timeout,
+                  'split_loggers': CONF.split_loggers
                   }
     if CONF.auth_strategy == 'keystone':
         global _SESSION
         if not _SESSION:
             config_options = {'insecure': CONF.glance_api_insecure,
                               'cacert': CONF.glance_ca_certificates_file,
-                              'timeout': CONF.glance_request_timeout
+                              'timeout': CONF.glance_request_timeout,
+                              'split_loggers': CONF.split_loggers
                               }
             _SESSION = ks_session.Session().load_from_options(**config_options)
 
@@ -252,6 +276,16 @@ class GlanceImageService(object):
                 _params[param] = params.get(param)
 
         return _params
+
+    def list_members(self, context, image_id):
+        """Returns a list of dicts with image member data."""
+        try:
+            return self._client.call(context,
+                                     'list',
+                                     controller='image_members',
+                                     image_id=image_id)
+        except Exception:
+            _reraise_translated_image_exception(image_id)
 
     def show(self, context, image_id):
         """Returns a dict with image data for the given opaque image id."""
@@ -407,8 +441,13 @@ class GlanceImageService(object):
         #                 is redundant, so ignore it.
         image_meta = {key: getattr(image, key)
                       for key in image.keys()
-                      if self._image_schema.is_base_property(key) is True
-                      and key != 'schema'}
+                      if self._image_schema.is_base_property(key) is True and
+                      key != 'schema'}
+
+        # Process 'cinder_encryption_key_id' as a metadata key
+        if 'cinder_encryption_key_id' in image.keys():
+            image_meta['cinder_encryption_key_id'] = \
+                image['cinder_encryption_key_id']
 
         # NOTE(aarefiev): nova is expected that all image properties
         # (custom or defined in schema-image.json) stores in
@@ -435,8 +474,7 @@ class GlanceImageService(object):
 
         return image_meta
 
-    @staticmethod
-    def _is_image_available(context, image):
+    def _is_image_available(self, context, image):
         """Check image availability.
 
         This check is needed in case Nova and Glance are deployed
@@ -457,6 +495,12 @@ class GlanceImageService(object):
 
         if context.project_id and ('project_id' in properties):
             return str(properties['project_id']) == str(context.project_id)
+
+        if image.visibility == 'shared':
+            for member in self.list_members(context, image.id):
+                if (context.project_id == member['member_id'] and
+                        member['status'] == 'accepted'):
+                    return True
 
         try:
             user_id = properties['user_id']
@@ -520,7 +564,8 @@ def _extract_attributes(image):
                         'name', 'created_at', 'updated_at',
                         'deleted', 'deleted_at', 'checksum',
                         'min_disk', 'min_ram', 'protected',
-                        'visibility']
+                        'visibility',
+                        'cinder_encryption_key_id']
 
     output = {}
 

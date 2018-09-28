@@ -356,9 +356,17 @@ class SCApiHelper(object):
         # about.
         connection.vfname = self.config.dell_sc_volume_folder
         connection.sfname = self.config.dell_sc_server_folder
-        connection.excluded_domain_ips = self.config.excluded_domain_ip
-        if not connection.excluded_domain_ips:
-            connection.excluded_domain_ips = []
+        connection.excluded_domain_ips = self.config.excluded_domain_ips
+        if self.config.excluded_domain_ip:
+            LOG.info("Using excluded_domain_ip for "
+                     "excluding domain IPs is deprecated in the "
+                     "Stein release of OpenStack. Please use the "
+                     "excluded_domain_ips configuration option.")
+            connection.excluded_domain_ips += self.config.excluded_domain_ip
+
+        # Remove duplicates
+        connection.excluded_domain_ips = list(set(
+                                              connection.excluded_domain_ips))
         # Our primary SSN doesn't change
         connection.primaryssn = self.primaryssn
         if self.storage_protocol == 'FC':
@@ -435,10 +443,11 @@ class SCApi(object):
         3.7.0 - Support for Data Reduction, Group QOS and Volume QOS.
         4.0.0 - Driver moved to dell_emc.
         4.1.0 - Timeouts added to rest calls.
+        4.1.1 - excluded_domain_ips support.
 
     """
 
-    APIDRIVERVERSION = '4.1.0'
+    APIDRIVERVERSION = '4.1.1'
 
     def __init__(self, host, port, user, password, verify,
                  asynctimeout, synctimeout, apiversion):
@@ -1710,7 +1719,14 @@ class SCApi(object):
                  {'lun': lun,
                   'wwn': wwns,
                   'map': itmap})
-        return lun, wwns, itmap
+
+        # Return the response in lowercase
+        wwns_lower = [w.lower() for w in wwns]
+        itmap_lower = dict()
+        for key in itmap.keys():
+            itmap_lower[key.lower()] = [v.lower() for v in itmap[key]]
+
+        return lun, wwns_lower, itmap_lower
 
     def _find_active_controller(self, scvolume):
         """Finds the controller on which the Dell volume is active.
@@ -1776,12 +1792,13 @@ class SCApi(object):
                       'Error finding configuration: %s', cportid)
         return controllerport
 
-    def find_iscsi_properties(self, scvolume):
+    def find_iscsi_properties(self, scvolume, scserver):
         """Finds target information for a given Dell scvolume object mapping.
 
         The data coming back is both the preferred path and all the paths.
 
         :param scvolume: The dell sc volume object.
+        :param scserver: The dell sc server object.
         :returns: iSCSI property dictionary.
         :raises VolumeBackendAPIException:
         """
@@ -1813,9 +1830,12 @@ class SCApi(object):
                 # Make sure this isn't a duplicate.
                 newportal = address + ':' + six.text_type(port)
                 for idx, portal in enumerate(portals):
-                    if portal == newportal and iqns[idx] == iqn:
+                    if (portal == newportal
+                            and iqns[idx] == iqn
+                            and luns[idx] == lun):
                         LOG.debug('Skipping duplicate portal %(ptrl)s and'
-                                  'iqn %(iqn)s.', {'ptrl': portal, 'iqn': iqn})
+                                  ' iqn %(iqn)s and lun %(lun)s.',
+                                  {'ptrl': portal, 'iqn': iqn, 'lun': lun})
                         return
                 # It isn't in the list so process it.
                 portals.append(newportal)
@@ -1849,10 +1869,17 @@ class SCApi(object):
             isvpmode = self._is_virtualport_mode(ssn)
             # Trundle through our mappings.
             for mapping in mappings:
-                # Don't return remote sc links.
                 msrv = mapping.get('server')
-                if msrv and msrv.get('objectType') == 'ScRemoteStorageCenter':
-                    continue
+                if msrv:
+                    # Don't return remote sc links.
+                    if msrv.get('objectType') == 'ScRemoteStorageCenter':
+                        continue
+                    # Don't return information for other servers. But
+                    # do log it.
+                    if self._get_id(msrv) != self._get_id(scserver):
+                        LOG.debug('find_iscsi_properties: Multiple servers'
+                                  ' attached to volume.')
+                        continue
 
                 # The lun, ro mode and status are in the mapping.
                 LOG.debug('find_iscsi_properties: mapping: %s', mapping)

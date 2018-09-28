@@ -90,9 +90,19 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
               - Support for manage/unmanage snapshots
                 (vmax-manage-unmanage-snapshot)
               - Support for revert to volume snapshot
+        3.2.0 - Support for retyping replicated volumes (bp
+                vmax-retype-replicated-volumes)
+              - Support for multiattach volumes (bp vmax-allow-multi-attach)
+              - Support for list manageable volumes and snapshots
+                (bp/vmax-list-manage-existing)
+              - Fix for SSL verification/cert application (bug #1772924)
+              - Log VMAX metadata of a volume (bp vmax-metadata)
+              - Fix for get-pools command (bug #1784856)
+        3.3.0 - Fix for initiator retrieval and short hostname unmapping
+                (bugs #1783855 #1783867)
     """
 
-    VERSION = "3.1.0"
+    VERSION = "3.3.0"
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_VMAX_CI"
@@ -196,7 +206,6 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         """
         pass
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -207,6 +216,9 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         The target_wwn can be a single entry or a list of wwns that
         correspond to the list of remote wwn(s) that will export the volume.
         Example return values:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'fibre_channel'
                 'data': {
@@ -226,6 +238,7 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
                     'target_wwn': ['1234567890123', '0987654321321'],
                 }
             }
+
         :param volume: the cinder volume object
         :param connector: the connector object
         :returns: dict -- the target_wwns and initiator_target_map
@@ -233,7 +246,9 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         device_info = self.common.initialize_connection(
             volume, connector)
         if device_info:
-            return self.populate_data(device_info, volume, connector)
+            conn_info = self.populate_data(device_info, volume, connector)
+            fczm_utils.add_fc_zone(conn_info)
+            return conn_info
         else:
             return {}
 
@@ -262,7 +277,6 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
 
         return data
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector.
 
@@ -284,6 +298,7 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         if zoning_mappings:
             self.common.terminate_connection(volume, connector)
             data = self._cleanup_zones(zoning_mappings)
+        fczm_utils.remove_fc_zone(data)
         return data
 
     def _get_zoning_mappings(self, volume, connector):
@@ -296,7 +311,7 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         """
         loc = volume.provider_location
         name = ast.literal_eval(loc)
-        host = connector['host']
+        host = self.common.utils.get_host_short_name(connector['host'])
         zoning_mappings = {}
         try:
             array = name['array']
@@ -512,6 +527,40 @@ class VMAXFCDriver(san.SanDriver, driver.FibreChannelDriver):
         :param snapshot: the snapshot object
         """
         self.common.unmanage_snapshot(snapshot)
+
+    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
+                               sort_keys, sort_dirs):
+        """Lists all manageable volumes.
+
+        :param cinder_volumes: List of currently managed Cinder volumes.
+                               Unused in driver.
+        :param marker: Begin returning volumes that appear later in the volume
+                       list than that represented by this reference.
+        :param limit: Maximum number of volumes to return. Default=1000.
+        :param offset: Number of volumes to skip after marker.
+        :param sort_keys: Results sort key. Valid keys: size, reference.
+        :param sort_dirs: Results sort direction. Valid dirs: asc, desc.
+        :return: List of dicts containing all manageable volumes.
+        """
+        return self.common.get_manageable_volumes(marker, limit, offset,
+                                                  sort_keys, sort_dirs)
+
+    def get_manageable_snapshots(self, cinder_snapshots, marker, limit, offset,
+                                 sort_keys, sort_dirs):
+        """Lists all manageable snapshots.
+
+        :param cinder_snapshots: List of currently managed Cinder snapshots.
+                                 Unused in driver.
+        :param marker: Begin returning volumes that appear later in the
+                       snapshot list than that represented by this reference.
+        :param limit: Maximum number of snapshots to return. Default=1000.
+        :param offset: Number of snapshots to skip after marker.
+        :param sort_keys: Results sort key. Valid keys: size, reference.
+        :param sort_dirs: Results sort direction. Valid dirs: asc, desc.
+        :return: List of dicts containing all manageable snapshots.
+        """
+        return self.common.get_manageable_snapshots(marker, limit, offset,
+                                                    sort_keys, sort_dirs)
 
     def retype(self, ctxt, volume, new_type, diff, host):
         """Migrate volume to another host using retype.

@@ -8,6 +8,7 @@
 !.gitignore
 !.mailmap
 !.testr.conf
+!.stestr.conf
 !.zuul.yaml
 .*.sw?
 AUTHORS
@@ -39,4 +40,4 @@ api-ref/build
 
 # Files created by releasenotes build
 releasenotes/build
-contrib/blockbox/.db_data
+contrib/block-box/.db_data

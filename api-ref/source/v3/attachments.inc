@@ -10,6 +10,29 @@ deletes attachment.
           microversion. `Complete attachment` is new as of the 3.44
           microversion.
 
+When you create, list, update, or delete attachment, the possible
+status values are:
+
+**VolumeAttachment statuses**
+
++------------------+--------------------------------------------------------+
+| Status           | Description                                            |
++------------------+--------------------------------------------------------+
+| attached         | A volume is attached for the attachment.               |
++------------------+--------------------------------------------------------+
+| attaching        | A volume is attaching for the attachment.              |
++------------------+--------------------------------------------------------+
+| detached         | A volume is detached for the attachment.               |
++------------------+--------------------------------------------------------+
+| reserved         | A volume is reserved for the attachment.               |
++------------------+--------------------------------------------------------+
+| error_attaching  | A volume is error attaching for the attachment.        |
++------------------+--------------------------------------------------------+
+| error_detaching  | A volume is error detaching for the attachment.        |
++------------------+--------------------------------------------------------+
+| deleted          | The attachment is deleted.                             |
++------------------+--------------------------------------------------------+
+
 
 Delete attachment
 ~~~~~~~~~~~~~~~~~
@@ -21,7 +44,7 @@ Deletes an attachment.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -52,7 +75,7 @@ Shows details for an attachment.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -83,7 +106,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -105,7 +128,7 @@ users specify invalid filters in the url, API will return bad request.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -138,7 +161,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -159,7 +182,7 @@ specify invalid filters in the url, API will return bad request.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -189,7 +212,7 @@ Response Parameters
 .. rest_parameters:: parameters.yaml
 
    - status: status_9
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -211,7 +234,7 @@ Creates an attachment.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -233,6 +256,7 @@ Request
    - instance_uuid: instance_uuid_1
    - connector: connector
    - volume_uuid: volume_id_7
+   - mode: attach_mode_1
 
 Request Example
 ---------------
@@ -251,7 +275,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -273,7 +297,7 @@ and set up the appropriate connection_info from the driver.
 Available starting in the 3.27 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -311,7 +335,7 @@ Response Parameters
    - connection_info: connection_info
    - attached_at: attached_at
    - attach_mode: attach_mode
-   - instance: instance_uuid
+   - instance: instance_uuid_1
    - volume_id: volume_id_7
    - id: attachment_id_2
 
@@ -332,7 +356,7 @@ Complete an attachment for a cinder volume.
 Available starting in the 3.44 microversion.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

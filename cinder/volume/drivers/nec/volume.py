@@ -27,6 +27,9 @@ class MStorageISCSIDriver(volume_helper.MStorageDSVDriver,
                           driver.ISCSIDriver):
     """M-Series Storage Snapshot iSCSI Driver."""
 
+    VERSION = '1.10.3'
+    WIKI_NAME = 'NEC_Cinder_CI'
+
     def __init__(self, *args, **kwargs):
         super(MStorageISCSIDriver, self).__init__(*args, **kwargs)
         self._set_config(self.configuration, self.host,
@@ -66,6 +69,9 @@ class MStorageFCDriver(volume_helper.MStorageDSVDriver,
                        driver.FibreChannelDriver):
     """M-Series Storage Snapshot FC Driver."""
 
+    VERSION = '1.10.3'
+    WIKI_NAME = 'NEC_Cinder_CI'
+
     def __init__(self, *args, **kwargs):
         super(MStorageFCDriver, self).__init__(*args, **kwargs)
         self._set_config(self.configuration, self.host,
@@ -80,13 +86,15 @@ class MStorageFCDriver(volume_helper.MStorageDSVDriver,
     def get_volume_stats(self, refresh=False):
         return self.fc_get_volume_stats(refresh)
 
-    @fczm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
-        return self.fc_initialize_connection(volume, connector)
+        conn_info = self.fc_initialize_connection(volume, connector)
+        fczm_utils.add_fc_zone(conn_info)
+        return conn_info
 
-    @fczm_utils.remove_fc_zone
     def terminate_connection(self, volume, connector, **kwargs):
-        return self.fc_terminate_connection(volume, connector)
+        conn_info = self.fc_terminate_connection(volume, connector)
+        fczm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
     def create_export_snapshot(self, context, snapshot, connector):
         return self.fc_do_export_snapshot(context, snapshot, connector)

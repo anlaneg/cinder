@@ -29,12 +29,12 @@ Programming HowTos and Tutorials
     :maxdepth: 3
 
     development.environment
+    testing
     api_microversion_dev
     api_conditional_updates
-    api_microversion_history
-    testing
     addmethod.openstackapi
     drivers
+    high_availability
     gmr
     replication
     user_messages
@@ -58,6 +58,7 @@ Background Concepts for Cinder
    architecture
    attach_detach_conventions
    attach_detach_conventions_v2
+   thin_provisioning
    threading
    i18n
    rpc
@@ -72,26 +73,7 @@ Other Resources
    jenkins
    releasenotes
 
-API Reference
--------------
-.. toctree::
-   :maxdepth: 3
-
-   ./api/autoindex
-
-Module Reference
-----------------
-.. toctree::
-   :maxdepth: 3
-
-   services
-   database
-   volume
-   auth
-   api
-   scheduler
-   fakes
-   cinder
+   Module Reference <api/modules>
 
 Indices and tables
 ------------------

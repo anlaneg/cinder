@@ -18,7 +18,7 @@ Disassociate a QoS specification from all associations
 Disassociates a QoS specification from all associations.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -42,11 +42,11 @@ Unset keys in a QoS specification
 Unsets keys in a QoS specification.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
-   - 200
+   - 202
 
 
 Request
@@ -74,7 +74,7 @@ Lists all associations for a QoS specification.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -95,18 +95,16 @@ Response
 
 .. rest_parameters:: parameters.yaml
 
-   - qos_specs: qos_specs
-   - specs: specs
-   - consumer: consumer_1
-   - name: name_4
-   - id: id_3
-   - links: links_2
+   - qos_associations: qos_associations
+   - type: qos_association_type
+   - id: qos_association_id
+   - name: qos_association_name
 
 
 Response Example
 ----------------
 
-.. literalinclude:: ./samples/qos-show-response.json
+.. literalinclude:: ./samples/qos_show_response.json
    :language: javascript
 
 
@@ -119,7 +117,7 @@ Associates a QoS specification with a volume type.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -145,7 +143,7 @@ Disassociates a QoS specification from a volume type.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -170,7 +168,7 @@ Show a QoS specification details
 Shows details for a QoS specification.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -224,7 +222,7 @@ Set keys in a QoS specification
 Sets keys in a QoS specification.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -269,7 +267,7 @@ Delete a QoS specification
 Deletes a QoS specification.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -297,7 +295,7 @@ Specify one or more key and value pairs in the request body.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -333,6 +331,13 @@ Response Parameters
    - specs: specs
 
 
+Response Example
+----------------
+
+.. literalinclude:: ./samples/qos-create-response.json
+   :language: javascript
+
+
 List QoS Specifications
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -342,7 +347,7 @@ Lists quality of service (QoS) specifications.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-28 21:24+0000\n"
+"POT-Creation-Date: 2018-08-29 01:38+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -200,9 +200,6 @@ msgstr "必須指定 'consistencygroup_id'"
 msgid "'qemu-img info' parsing failed."
 msgstr "'qemu-img info' 剖析失敗。"
 
-msgid "'status' must be specified."
-msgstr "必須指定 'status'。"
-
 #, python-format
 msgid ""
 "(Command: %(cmd)s) (Return Code: %(exit_code)s) (Stdout: %(stdout)s) "
@@ -382,10 +379,6 @@ msgstr "執行備份 RBD 作業時失敗"
 
 msgid "Backup already exists in database."
 msgstr "備份已經存在於資料庫中。"
-
-#, python-format
-msgid "Backup driver reported an error: %(message)s"
-msgstr "備份驅動程式報告了錯誤：%(message)s"
 
 msgid "Backup id required"
 msgstr "需要備份 ID"
@@ -821,10 +814,6 @@ msgstr "配置 'max_over_subscription_ratio' 無效。必需大於 0：%s"
 msgid "Configuration error: dell_sc_ssn not set."
 msgstr "配置錯誤：未設定 dell_sc_ssn。"
 
-#, python-format
-msgid "Configuration file %(configurationFile)s does not exist."
-msgstr "配置檔 %(configurationFile)s 不存在。"
-
 msgid "Configuration is not found."
 msgstr "找不到配置。"
 
@@ -1250,9 +1239,6 @@ msgstr "在 %(fun)s 中找不到預期的直欄：%(hdr)s。"
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "在 %(fun)s 中找不到預期的索引鍵 %(key)s：%(raw)s。"
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr "停用原因包含無效的字元，或者太長"
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "找不到名稱為 %s 的網域。"
@@ -1345,10 +1331,6 @@ msgid ""
 msgstr ""
 "新增至帶 IQN %(iqn)s 的目標群組 %(targetgroup)s 時發生錯誤。回覆碼："
 "%(ret.status)d。訊息：%(ret.data)s。"
-
-#, python-format
-msgid "Error Attaching volume %(vol)s."
-msgstr "連接磁區 %(vol)s 時發生錯誤。"
 
 #, python-format
 msgid ""
@@ -1510,14 +1492,6 @@ msgid ""
 msgstr ""
 "取得儲存區 %(pool)s 上的共用 %(share)s 時發生錯誤。專案：%(project)s回覆碼："
 "%(ret.status)d。訊息：%(ret.data)s。"
-
-#, python-format
-msgid ""
-"Error Getting Snapshot: %(snapshot)s on Volume: %(lun)s to Pool: %(pool)s "
-"Project: %(project)s  Return code: %(ret.status)d Message: %(ret.data)s."
-msgstr ""
-"在儲存區 %(pool)s 的磁區 %(lun)s 上取得 Snapshot：%(snapshot)s 時發生錯誤專"
-"案：%(project)s。回覆碼：%(ret.status)d。訊息：%(ret.data)s。"
 
 #, python-format
 msgid ""
@@ -1737,6 +1711,10 @@ msgstr "此錯誤不是 TypeError。"
 msgid "Error renaming volume %(vol)s: %(err)s."
 msgstr "重命名磁區 %(vol)s 時發生錯誤：%(err)s。"
 
+#, python-format
+msgid "Error response: %s"
+msgstr "錯誤的回應：%s"
+
 msgid "Error retrieving volume size"
 msgstr "擷取磁區大小時發生錯誤"
 
@@ -1887,11 +1865,6 @@ msgstr ""
 msgid "Error[status] %(stat)s - [result] %(res)s] while getting volume id."
 msgstr "取得磁區 ID 時發生錯誤 [狀態] %(stat)s - [結果] %(res)s。"
 
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr "已超出磁區 %(volume_id)s 的排程嘗試次數上限 %(max_attempts)d"
-
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "已超過每個磁區的 Snapshot 數目限制"
 
@@ -1948,10 +1921,6 @@ msgstr ""
 
 msgid "Extend volume error."
 msgstr "延伸磁區時發生錯誤。"
-
-msgid ""
-"Extend volume is only supported for this driver when no snapshots exist."
-msgstr "僅當不存在 Snapshot 時，此驅動程式才支援延伸磁區。"
 
 msgid "Extend volume not implemented"
 msgstr "未實作延伸磁區"
@@ -2984,9 +2953,6 @@ msgstr ""
 "刪除 rbd 磁區時發出 ImageBusy 錯誤。造成此問題的原因可能是從已損毀的用戶端進"
 "行連線，如果是這樣，則可以在30 秒後，透過重試刪除來解決。"
 
-msgid "Incorrect request body format"
-msgstr "要求內文的格式不正確"
-
 msgid "Incremental backups exist for this backup."
 msgstr "此備份的增量備份已存在。"
 
@@ -3184,14 +3150,6 @@ msgstr "所配置的預先提取類型 %s 無效。PrefetchType 必須位於 0�
 msgid "Invalid qos specs: %(reason)s"
 msgstr "無效的服務品質規格：%(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "將磁區連接至無效目標的要求無效"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr "以無效模式來連接磁區的要求無效。連接模式應該是 'rw' 或 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "無效的預約有效期限 %(expire)s。"
@@ -3235,18 +3193,6 @@ msgstr "無效的更新設定：'%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "force 的值 '%s' 無效。"
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "'bootable' 的值無效：'%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "'force' 的值 '%s' 無效"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "'readonly' 的值無效：'%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "'scheduler_max_attempts' 的值無效，必須 >= 1"
@@ -3323,11 +3269,6 @@ msgid ""
 "Issuing a fail-over failed because replication is not properly configured."
 msgstr "發出失效接手失敗，因為未正確配置抄寫。"
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr "索引鍵名稱只能包含英數字元、底線、句點、冒號及連字號。"
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError：%s"
@@ -3394,9 +3335,6 @@ msgstr "要求 URL 的格式不正確"
 #, python-format
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "對指令 %(cmd)s 的回應格式不正確：%(reason)s"
-
-msgid "Malformed scheduler_hints attribute"
-msgstr "scheduler_hints 屬性的格式不正確"
 
 #, python-format
 msgid "Malformed show fcns database string: %s"
@@ -3487,15 +3425,8 @@ msgstr "遺漏 'purestorage' Python 模組，請確保該程式庫已安裝且�
 msgid "Missing Fibre Channel SAN configuration param - fc_fabric_names"
 msgstr "遺漏了「光纖通道」SAN 配置參數 - fc_fabric_names"
 
-msgid "Missing request body"
-msgstr "遺漏了要求內文"
-
 msgid "Missing request body."
 msgstr "遺漏要求內文。"
-
-#, python-format
-msgid "Missing required element '%s' in request body"
-msgstr "要求內文中遺漏了必要元素 '%s'"
 
 #, python-format
 msgid "Missing required element '%s' in request body."
@@ -3531,24 +3462,9 @@ msgstr ""
 "必須以雲端管理者身分使用 Keystone policy.json 來執行此指令，此 policy.json 容"
 "許雲端管理者列出和取得任何專案。"
 
-msgid "Must specify 'connector'"
-msgstr "必須指定 'connector'"
-
-msgid "Must specify 'new_volume'"
-msgstr "必須指定 'new_volume'"
-
-msgid "Must specify 'status'"
-msgstr "必須指定 'status'"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr "必須指定 'status'、'attach_status' 或 'migration_status' 進行更新。"
-
-msgid "Must specify a valid attach status"
-msgstr "必須指定有效的連接狀態"
-
-msgid "Must specify a valid migration status"
-msgstr "必須指定有效的移轉狀態"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -3560,17 +3476,8 @@ msgid ""
 "invalid."
 msgstr "必須指定有效的供應類型 %(valid)s，值 '%(prov)s' 無效。"
 
-msgid "Must specify a valid status"
-msgstr "必須指定有效的狀態"
-
 msgid "Must specify an ExtensionManager class"
 msgstr "必須指定 ExtensionManager 類別"
-
-msgid "Must specify bootable in request."
-msgstr "必須在要求中指定 bootable。"
-
-msgid "Must specify readonly in request."
-msgstr "必須在要求中指定 readonly。"
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr "必須指定 Snapshot source-name 或 source-id。"
@@ -3633,12 +3540,6 @@ msgstr ""
 "新大小應該大於後端儲存體中的實際大小。實際大小：%(oldsize)s，新大小："
 "%(newsize)s。"
 
-msgid "New volume size must be specified as an integer."
-msgstr "必須將新的磁區大小指定為整數。"
-
-msgid "New volume type must be specified."
-msgstr "必須指定新的磁區類型。"
-
 msgid "New volume type not specified in request_spec."
 msgstr "request_spec 中沒有指定新的磁區類型。"
 
@@ -3691,9 +3592,6 @@ msgstr "找不到 %s 的良好 iSCSI 入口網站。"
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "目標陣列上沒有支援 iSCSI 的埠。"
-
-msgid "No image_name was specified in request."
-msgstr "未在要求中指定 image_name。"
 
 msgid "No initiator connected to fabric."
 msgstr "沒有起始器已連接至光纖。"
@@ -3860,9 +3758,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "必須指定 REST 伺服器憑證的路徑。"
-
-msgid "Please specify a name for QoS specs."
-msgstr "請為服務品質規格指定名稱。"
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4109,12 +4004,6 @@ msgstr "要求內文與 URI 不符"
 msgid "Request body contains too many items"
 msgstr "要求內文包含太多項目"
 
-msgid "Request body contains too many items."
-msgstr "要求內文包含太多項目。"
-
-msgid "Request body empty"
-msgstr "要求內文是空的"
-
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
 msgstr "傳送至 Datera 叢集的要求，傳回了不正確的狀態：%(status)s | %(reason)s"
@@ -4312,12 +4201,6 @@ msgstr "容量"
 #, python-format
 msgid "Size for volume: %s not found, cannot secure delete."
 msgstr "找不到磁區 %s 的大小，無法安全刪除。"
-
-#, python-format
-msgid ""
-"Size is %(image_size)dGB and doesn't fit in a volume of size "
-"%(volume_size)dGB."
-msgstr "大小為 %(image_size)d GB，無法容納大小為%(volume_size)d GB 的磁區。"
 
 #, python-format
 msgid ""
@@ -4556,9 +4439,6 @@ msgid ""
 "and resume replication on the LeftHand backends."
 msgstr ""
 "主機尚未備妥以進行失效回復。請重新同步磁區，並回復 LeftHand 後端上的抄寫。"
-
-msgid "The key cannot be None."
-msgstr "金鑰不能是「無」。"
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "未實作方法 update_migrated_volume。"
@@ -4917,17 +4797,6 @@ msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "找不到 ssh_hosts_key_file：%s"
 
 #, python-format
-msgid ""
-"Unable to find viable pg snapshot to use forfailover on selected secondary "
-"array: %(id)s."
-msgstr "找不到可行的 pg Snapshot 以用於選定次要陣列上的失效接手：%(id)s。"
-
-#, python-format
-msgid ""
-"Unable to find viable secondary array fromconfigured targets: %(targets)s."
-msgstr "找不到來自已配置目標的可行次要陣列：%(targets)s。"
-
-#, python-format
 msgid "Unable to find volume %s"
 msgstr "找不到磁區 %s"
 
@@ -5241,10 +5110,6 @@ msgstr "「VV 集」%s 不存在。"
 #, python-format
 msgid "Valid consumer of QoS specs are: %s"
 msgstr "服務品質規格的有效消費者為：%s"
-
-#, python-format
-msgid "Valid control location are: %s"
-msgstr "有效的控制項位置為：%s"
 
 #, python-format
 msgid "Validate volume connection failed (error: %(err)s)."
@@ -6129,9 +5994,6 @@ msgstr "已指派 consistencygroup"
 msgid "consistencygroup changed"
 msgstr "已變更 consistencygroup"
 
-msgid "control_location must be defined"
-msgstr "必須定義 control_location"
-
 msgid "create_cloned_volume, Source Volume does not exist in ETERNUS."
 msgstr "create_cloned_volume，ETERNUS 中不存在「來源磁區」。"
 
@@ -6471,10 +6333,6 @@ msgid "mdiskgrp missing quotes %s"
 msgstr "mdiskgrp 遺漏引用 %s"
 
 #, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy 必須是 'on-demand' 或 'never'，已傳遞：%s"
-
-#, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."
 msgstr "mkfs 在磁區 %(vol)s 上執行時失敗，錯誤訊息為：%(err)s。"
 
@@ -6513,9 +6371,6 @@ msgstr "未關閉 open_access_enabled。"
 
 msgid "progress must be an integer percentage"
 msgstr "進度必須是整數百分比"
-
-msgid "provider must be defined"
-msgstr "必須定義提供者"
 
 #, python-format
 msgid ""

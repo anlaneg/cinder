@@ -23,6 +23,7 @@ import math
 import os
 import re
 import shutil
+import string
 import tempfile
 import time
 
@@ -137,6 +138,16 @@ def locked_volume_id_operation(f, external=False):
     return lvo_inner1
 
 
+class BackingFileTemplate(string.Template):
+    """Custom Template for substitutions in backing files regex strings
+
+        Changes the default delimiter from '$' to '#' in order to prevent
+        clashing with the the regex end of line marker '$'.
+    """
+    delimiter = '#'
+    idpattern = r'[a-z][_a-z0-9]*'
+
+
 class RemoteFSDriver(driver.BaseVD):
     """Common base for drivers that work like NFS."""
 
@@ -217,7 +228,7 @@ class RemoteFSDriver(driver.BaseVD):
         provisioned_size = 0.0
         for share in self.shares.keys():
             mount_path = self._get_mount_point_for_share(share)
-            out, _ = self._execute('du', '--bytes', mount_path,
+            out, _ = self._execute('du', '--bytes', '-s', mount_path,
                                    run_as_root=self._execute_as_root)
             provisioned_size += int(out.split()[0])
         return round(provisioned_size / units.Gi, 2)
@@ -682,7 +693,7 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
     """
 
     _VALID_IMAGE_EXTENSIONS = []
-    # The following flag may be overriden by the concrete drivers in order
+    # The following flag may be overridden by the concrete drivers in order
     # to avoid using temporary volume snapshots when creating volume clones,
     # when possible.
 
@@ -744,11 +755,20 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
             json.dump(snap_info, f, indent=1, sort_keys=True)
 
     def _qemu_img_info_base(self, path, volume_name, basedir,
+                            ext_bf_template=None,
                             force_share=False,
                             run_as_root=False):
         """Sanitize image_utils' qemu_img_info.
 
         This code expects to deal only with relative filenames.
+
+        :param path: Path to the image file whose info is fetched
+        :param volume_name: Name of the volume
+        :param basedir: Path to backing files directory
+        :param ext_bf_template: Alt. string.Template for allowed backing files
+        :type object: BackingFileTemplate
+        :param force_share: Wether to force fetching img info for images in use
+        :param run_as_root: Wether to run with privileged permissions or not
         """
 
         run_as_root = run_as_root or self._execute_as_root
@@ -765,13 +785,22 @@ class RemoteFSSnapDriverBase(RemoteFSDriver):
             else:
                 valid_ext = ''
 
-            backing_file_template = \
-                "(%(basedir)s/[0-9a-f]+/)?%" \
-                "(volname)s(.(tmp-snap-)?[0-9a-f-]+)?%(valid_ext)s$" % {
-                    'basedir': basedir,
-                    'volname': volume_name,
-                    'valid_ext': valid_ext,
-                }
+            if ext_bf_template:
+                backing_file_template = ext_bf_template.substitute(
+                    basedir=basedir, volname=volume_name, valid_ext=valid_ext
+                )
+                LOG.debug("Fetching qemu-img info with special "
+                          "backing_file_template: %(bft)s", {
+                              "bft": backing_file_template
+                          })
+            else:
+                backing_file_template = \
+                    "(%(basedir)s/[0-9a-f]+/)?%" \
+                    "(volname)s(.(tmp-snap-)?[0-9a-f-]+)?%(valid_ext)s$" % {
+                        'basedir': basedir,
+                        'volname': volume_name,
+                        'valid_ext': valid_ext,
+                    }
             if not re.match(backing_file_template, info.backing_file,
                             re.IGNORECASE):
                 raise exception.RemoteFSInvalidBackingFile(
@@ -1734,14 +1763,13 @@ class RemoteFSPoolMixin(object):
         for share in self._mounted_shares:
             (share_capacity,
              share_free,
-             share_used) = self._get_capacity_info(share)
+             total_allocated) = self._get_capacity_info(share)
 
             pool = {'pool_name': self._get_pool_name_from_share(share),
                     'total_capacity_gb': share_capacity / float(units.Gi),
                     'free_capacity_gb': share_free / float(units.Gi),
-                    'provisioned_capacity_gb': share_used / float(units.Gi),
-                    'allocated_capacity_gb': (
-                        share_capacity - share_free) / float(units.Gi),
+                    'provisioned_capacity_gb': (
+                        total_allocated / float(units.Gi)),
                     'reserved_percentage': (
                         self.configuration.reserved_percentage),
                     'max_over_subscription_ratio': (

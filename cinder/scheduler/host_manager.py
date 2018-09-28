@@ -414,6 +414,8 @@ class HostManager(object):
         self.filter_handler = filters.BackendFilterHandler('cinder.scheduler.'
                                                            'filters')
         self.filter_classes = self.filter_handler.get_all_classes()
+        self.enabled_filters = self._choose_backend_filters(
+            CONF.scheduler_default_filters)
         self.weight_handler = importutils.import_object(
             CONF.scheduler_weight_handler,
             'cinder.scheduler.weights')
@@ -430,8 +432,6 @@ class HostManager(object):
         of acceptable filters (all loaded filters). If input is None,
         it uses CONF.scheduler_default_filters instead.
         """
-        if filter_cls_names is None:
-            filter_cls_names = CONF.scheduler_default_filters
         if not isinstance(filter_cls_names, (list, tuple)):
             filter_cls_names = [filter_cls_names]
         good_filters = []
@@ -481,7 +481,10 @@ class HostManager(object):
     def get_filtered_backends(self, backends, filter_properties,
                               filter_class_names=None):
         """Filter backends and return only ones passing all filters."""
-        filter_classes = self._choose_backend_filters(filter_class_names)
+        if filter_class_names is not None:
+            filter_classes = self._choose_backend_filters(filter_class_names)
+        else:
+            filter_classes = self.enabled_filters
         return self.filter_handler.get_filtered_objects(filter_classes,
                                                         backends,
                                                         filter_properties)
@@ -490,9 +493,12 @@ class HostManager(object):
                              weigher_class_names=None):
         """Weigh the backends."""
         weigher_classes = self._choose_backend_weighers(weigher_class_names)
-        return self.weight_handler.get_weighed_objects(weigher_classes,
-                                                       backends,
-                                                       weight_properties)
+
+        weighed_backends = self.weight_handler.get_weighed_objects(
+            weigher_classes, backends, weight_properties)
+
+        LOG.debug("Weighed %s", weighed_backends)
+        return weighed_backends
 
     def update_service_capabilities(self, service_name, host, capabilities,
                                     cluster_name, timestamp):

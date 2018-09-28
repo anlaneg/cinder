@@ -57,7 +57,7 @@ LOG = logging.getLogger(__name__)
 scaleio_opts = [
     cfg.StrOpt('sio_rest_server_port',
                default='443',
-               help='REST server port.'),
+               help='Gateway REST server port.'),
     cfg.BoolOpt('sio_verify_server_certificate',
                 default=False,
                 help='Verify server certificate.'),
@@ -65,12 +65,18 @@ scaleio_opts = [
                help='Server certificate path.'),
     cfg.BoolOpt('sio_round_volume_capacity',
                 default=True,
-                help='Round up volume capacity.'),
+                help='Round volume sizes up to 8GB boundaries. '
+                     'VxFlex OS/ScaleIO requires volumes to be sized '
+                     'in multiples of 8GB. If set to False, volume '
+                     'creation will fail for volumes not sized properly'),
     cfg.BoolOpt('sio_unmap_volume_before_deletion',
                 default=False,
-                help='Unmap volume before deletion.'),
+                help='Unmap volumes before deletion.'),
     cfg.StrOpt('sio_storage_pools',
-               help='Storage Pools.'),
+               help='Storage Pools. Comma separated list of storage '
+                    'pools used to provide volumes. Each pool should '
+                    'be specified as a '
+                    'protection_domain_name:storage_pool_name value'),
     cfg.StrOpt('sio_protection_domain_id',
                deprecated_for_removal=True,
                deprecated_reason="Replaced by sio_storage_pools option",
@@ -92,16 +98,21 @@ scaleio_opts = [
                deprecated_since="Pike",
                help='DEPRECATED: Storage Pool ID.'),
     cfg.StrOpt('sio_server_api_version',
-               help='ScaleIO API version.'),
+               help='VxFlex OS/ScaleIO API version. This value should be '
+                    'left as the default value unless otherwise instructed '
+                    'by technical support.'),
     cfg.FloatOpt('sio_max_over_subscription_ratio',
                  # This option exists to provide a default value for the
                  # ScaleIO driver which is different than the global default.
                  default=10.0,
-                 help='max_over_subscription_ratio setting for the ScaleIO '
-                      'driver. This replaces the general '
-                      'max_over_subscription_ratio which has no effect '
-                      'in this driver.'
-                      'Maximum value allowed for ScaleIO is 10.0.')
+                 help='max_over_subscription_ratio setting for the driver. '
+                      'Maximum value allowed is 10.0.'),
+    cfg.BoolOpt('sio_allow_non_padded_volumes',
+                default=False,
+                help='Allow volumes to be created in Storage Pools '
+                     'when zero padding is disabled. This option should '
+                     'not be enabled if multiple tenants will utilize '
+                     'volumes from a shared Storage Pool.'),
 ]
 
 CONF.register_opts(scaleio_opts, group=configuration.SHARED_CONF_GROUP)
@@ -309,7 +320,7 @@ class ScaleIODriver(driver.VolumeDriver):
             if not padded:
                 LOG.warning("Zero padding is disabled for pool, %s. "
                             "This could lead to existing data being "
-                            "accessible on new thick provisioned volumes. "
+                            "accessible on new provisioned volumes. "
                             "Consult the ScaleIO product documentation "
                             "for information on how to enable zero padding "
                             "and prevent this from occurring.",
@@ -481,6 +492,34 @@ class ScaleIODriver(driver.VolumeDriver):
                   {'id': id, 'name': encoded_name})
         return encoded_name
 
+    def _is_volume_creation_safe(self,
+                                 protection_domain,
+                                 storage_pool):
+        """Checks if volume creation is safe or not.
+
+        Using volumes with zero padding disabled can lead to existing data
+        being read off of a newly created volume.
+        """
+        # if we have been told to allow unsafe volumes
+        if self.configuration.sio_allow_non_padded_volumes:
+            # Enabled regardless of type, so safe to proceed
+            return True
+
+        try:
+            properties = self._get_storage_pool_properties(protection_domain,
+                                                           storage_pool)
+            padded = properties['zeroPaddingEnabled']
+        except Exception:
+            msg = (_("Unable to retrieve properties for pool, %(pool)s") %
+                   {'pool': storage_pool})
+            raise exception.InvalidInput(reason=msg)
+
+        # zero padded storage pools are safe
+        if padded:
+            return True
+        # if we got here, it's unsafe
+        return False
+
     def create_volume(self, volume):
         """Creates a scaleIO volume."""
         self._check_volume_size(volume.size)
@@ -559,6 +598,22 @@ class ScaleIODriver(driver.VolumeDriver):
         # Default volume type is thick.
         else:
             provisioning = "ThickProvisioned"
+
+        allowed = self._is_volume_creation_safe(protection_domain_name,
+                                                storage_pool_name)
+        if not allowed:
+            # Do not allow volume creation on this backend.
+            # Volumes may leak data between tenants.
+            LOG.error("Volume creation rejected due to "
+                      "zero padding being disabled for pool, %s:%s. "
+                      "This behaviour can be changed by setting "
+                      "the configuration option "
+                      "sio_allow_non_padded_volumes = True.",
+                      protection_domain_name,
+                      storage_pool_name)
+            msg = _("Volume creation rejected due to "
+                    "unsafe backend configuration.")
+            raise exception.VolumeBackendAPIException(data=msg)
 
         # units.Mi = 1024 ** 2
         volume_size_kb = volume.size * units.Mi
@@ -728,7 +783,15 @@ class ScaleIODriver(driver.VolumeDriver):
                  {'volname': volume_id,
                   'snapname': snapname})
 
-        return self._snapshot_volume(volume_id, snapname)
+        ret = self._snapshot_volume(volume_id, snapname)
+        if volume.size > snapshot.volume_size:
+            LOG.info("Extending volume %(vol)s to size %(size)s",
+                     {'vol': ret['provider_id'],
+                      'size': volume.size})
+            self._extend_volume(ret['provider_id'],
+                                snapshot.volume_size, volume.size)
+
+        return ret
 
     @staticmethod
     def _get_headers():

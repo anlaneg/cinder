@@ -54,7 +54,7 @@
 
 from __future__ import print_function
 
-
+import collections
 import logging as python_logging
 import prettytable
 import sys
@@ -67,6 +67,7 @@ from oslo_log import log as logging
 from oslo_utils import timeutils
 
 # Need to register global_opts
+from cinder.backup import rpcapi as backup_rpcapi
 from cinder.common import config  # noqa
 from cinder.common import constants
 from cinder import context
@@ -77,13 +78,23 @@ from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder.i18n import _
 from cinder import objects
+from cinder.objects import base as ovo_base
 from cinder import rpc
+from cinder.scheduler import rpcapi as scheduler_rpcapi
 from cinder import version
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import utils as vutils
 
 
 CONF = cfg.CONF
+
+RPC_VERSIONS = {
+    'cinder-scheduler': scheduler_rpcapi.SchedulerAPI.RPC_API_VERSION,
+    'cinder-volume': volume_rpcapi.VolumeAPI.RPC_API_VERSION,
+    'cinder-backup': backup_rpcapi.BackupAPI.RPC_API_VERSION,
+}
+
+OVO_VERSION = ovo_base.OBJ_VERSIONS.get_current()
 
 
 def _get_non_shared_target_hosts(ctxt):
@@ -248,6 +259,9 @@ class HostCommands(object):
 class DbCommands(object):
     """Class for managing the database."""
 
+    # NOTE: Online migrations cannot depend on having Cinder services running.
+    # Migrations can be called during Fast-Forward Upgrades without having any
+    # Cinder services up.
     online_migrations = (
         # Added in Queens
         db.service_uuids_online_data_migration,
@@ -266,17 +280,39 @@ class DbCommands(object):
 
     @args('version', nargs='?', default=None, type=int,
           help='Database version')
-    def sync(self, version=None):
+    @args('--bump-versions', dest='bump_versions', default=False,
+          action='store_true',
+          help='Update RPC and Objects versions when doing offline upgrades, '
+               'with this we no longer need to restart the services twice '
+               'after the upgrade to prevent ServiceTooOld exceptions.')
+    def sync(self, version=None, bump_versions=False):
         """Sync the database up to the most recent version."""
         if version is not None and version > db.MAX_INT:
             print(_('Version should be less than or equal to '
                     '%(max_version)d.') % {'max_version': db.MAX_INT})
             sys.exit(1)
         try:
-            return db_migration.db_sync(version)
+            result = db_migration.db_sync(version)
         except db_exc.DBMigrationError as ex:
             print("Error during database migration: %s" % ex)
             sys.exit(1)
+
+        try:
+            if bump_versions:
+                ctxt = context.get_admin_context()
+                services = objects.ServiceList.get_all(ctxt)
+                for service in services:
+                    rpc_version = RPC_VERSIONS[service.binary]
+                    if (service.rpc_current_version != rpc_version or
+                            service.object_current_version != OVO_VERSION):
+                        service.rpc_current_version = rpc_version
+                        service.object_current_version = OVO_VERSION
+                        service.save()
+        except Exception as ex:
+            print(_('Error during service version bump: %s') % ex)
+            sys.exit(2)
+
+        return result
 
     def version(self):
         """Print the current database version."""
@@ -376,6 +412,27 @@ class DbCommands(object):
         print(t)
 
         sys.exit(1 if ran else 0)
+
+    @args('--enable-replication', action='store_true', default=False,
+          help='Set replication status to enabled (default: %(default)s).')
+    @args('--active-backend-id', default=None,
+          help='Change the active backend ID (default: %(default)s).')
+    @args('--backend-host', required=True,
+          help='The backend host name.')
+    def reset_active_backend(self, enable_replication, active_backend_id,
+                             backend_host):
+        """Reset the active backend for a host."""
+
+        ctxt = context.get_admin_context()
+
+        try:
+            db.reset_active_backend(ctxt, enable_replication,
+                                    active_backend_id, backend_host)
+        except db_exc.DBReferenceError:
+            print(_("Failed to reset active backend for host %s, "
+                    "check cinder-manage logs for more details.") %
+                  backend_host)
+            sys.exit(1)
 
 
 class VersionCommands(object):
@@ -711,7 +768,8 @@ def methods_of(obj):
     """
     result = []
     for i in dir(obj):
-        if callable(getattr(obj, i)) and not i.startswith('_'):
+        if isinstance(getattr(obj, i),
+                      collections.Callable) and not i.startswith('_'):
             result.append((i, getattr(obj, i)))
     return result
 

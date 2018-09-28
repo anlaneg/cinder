@@ -80,3 +80,15 @@ class UnexpectedLunDeletion(Exception):
 
 class AdapterSetupError(Exception):
     pass
+
+
+class HostDeleteIsCalled(Exception):
+    pass
+
+
+class UnityThinCloneNotAllowedError(StoropsException):
+    pass
+
+
+class SystemAPINotSupported(StoropsException):
+    pass

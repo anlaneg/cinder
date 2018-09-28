@@ -117,6 +117,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         self.assertEqual(0, stats['reserved_percentage'])
         self.assertEqual('unknown', stats['total_capacity_gb'])
         self.assertEqual('unknown', stats['free_capacity_gb'])
+        self.assertFalse(stats['shared_targets'])
 
     def _create_volume_dict(self,
                             vol_id=VOL_ID,
@@ -581,6 +582,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             image_id)
         validate_disk_format.assert_called_once_with(image_meta['disk_format'])
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
     @mock.patch('cinder.volume.drivers.vmware.vmdk.VMwareVcVmdkDriver.'
                 '_validate_disk_format')
     @mock.patch.object(VMDK_DRIVER, '_get_adapter_type',
@@ -604,6 +606,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                    validate_image_adapter_type,
                                    get_adapter_type,
                                    validate_disk_format,
+                                   get_disk_type,
                                    vmware_disk_type='streamOptimized',
                                    backing_disk_size=VOL_SIZE,
                                    call_extend_backing=False,
@@ -617,6 +620,9 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         backing = mock.sentinel.backing
         vops.get_backing.return_value = backing
         vops.get_disk_size.return_value = backing_disk_size * units.Gi
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
 
         context = mock.sentinel.context
         volume = self._create_volume_dict()
@@ -642,7 +648,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         vops.get_disk_size.assert_called_once_with(backing)
         if call_extend_backing:
-            extend_backing.assert_called_once_with(backing, volume['size'])
+            extend_backing.assert_called_once_with(backing, volume['size'],
+                                                   disk_type)
         else:
             self.assertFalse(extend_backing.called)
 
@@ -1042,7 +1049,9 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         exp_req = {
             hub.DatastoreSelector.SIZE_BYTES: image_size,
             hub.DatastoreSelector.HARD_AFFINITY_DS_TYPE:
-                {hub.DatastoreType.VMFS, hub.DatastoreType.NFS}}
+                {hub.DatastoreType.VMFS,
+                 hub.DatastoreType.NFS,
+                 hub.DatastoreType.NFS41}}
         select_datastore.assert_called_once_with(exp_req)
         vops.create_datastore_folder.assert_called_once_with(
             ds_name, vmdk.TMP_IMAGES_DATASTORE_FOLDER_PATH, dc)
@@ -1576,16 +1585,19 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops.get_vmdk_path.return_value = vmdk_path
         dc = mock.sentinel.datacenter
         vops.get_dc.return_value = dc
+        disk_type = mock.sentinel.disk_type
+        eager_zero = (True if disk_type == "eagerZeroedThick" else False)
 
         backing = mock.sentinel.backing
         new_size = 1
-        self._driver._extend_backing(backing, new_size)
+        self._driver._extend_backing(backing, new_size, disk_type)
 
         vops.get_vmdk_path.assert_called_once_with(backing)
         vops.get_dc.assert_called_once_with(backing)
         vops.extend_virtual_disk.assert_called_once_with(new_size,
                                                          vmdk_path,
-                                                         dc)
+                                                         dc,
+                                                         eager_zero)
 
     @mock.patch.object(VMDK_DRIVER, 'session')
     @mock.patch('oslo_vmware.vim_util.get_vc_version')
@@ -1684,6 +1696,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
     @mock.patch.object(VMDK_DRIVER, '_validate_params')
     @mock.patch('re.compile')
+    @mock.patch.object(VMDK_DRIVER, '_create_session')
     @mock.patch.object(VMDK_DRIVER, '_get_vc_version')
     @mock.patch.object(VMDK_DRIVER, '_validate_vcenter_version')
     @mock.patch('oslo_vmware.pbm.get_pbm_wsdl_location')
@@ -1694,9 +1707,12 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
     @mock.patch.object(VMDK_DRIVER, 'session')
     def _test_do_setup(
             self, session, vops, ds_sel_cls, vops_cls, register_extension,
-            get_pbm_wsdl_loc, validate_vc_version, get_vc_version, re_compile,
-            validate_params, enable_pbm=True, ds_regex_pat=None,
-            invalid_regex=False):
+            get_pbm_wsdl_loc, validate_vc_version, get_vc_version,
+            create_session, re_compile, validate_params, enable_pbm=True,
+            ds_regex_pat=None, invalid_regex=False):
+        mock_session = mock.Mock()
+        create_session.return_value = mock_session
+
         if enable_pbm:
             ver_str = '5.5'
             pbm_wsdl = mock.sentinel.pbm_wsdl
@@ -1728,11 +1744,12 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             self._driver.do_setup(mock.ANY)
 
             validate_params.assert_called_once_with()
+            create_session.assert_called_once_with()
             get_vc_version.assert_called_once_with()
             validate_vc_version.assert_called_once_with(ver_str)
             if enable_pbm:
                 get_pbm_wsdl_loc.assert_called_once_with(ver_str)
-                self.assertEqual(pbm_wsdl, self._driver.pbm_wsdl)
+                mock_session.pbm_wsdl_loc_set.assert_called_once_with(pbm_wsdl)
             self.assertEqual(enable_pbm, self._driver._storage_policy_enabled)
             register_extension.assert_called_once()
             vops_cls.assert_called_once_with(
@@ -1763,12 +1780,13 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         self._test_do_setup(enable_pbm=False)
 
     @mock.patch.object(VMDK_DRIVER, '_validate_params')
+    @mock.patch.object(VMDK_DRIVER, '_create_session')
     @mock.patch.object(VMDK_DRIVER, '_get_vc_version')
     @mock.patch.object(VMDK_DRIVER, '_validate_vcenter_version')
     @mock.patch('oslo_vmware.pbm.get_pbm_wsdl_location')
     def test_do_setup_with_invalid_pbm_wsdl(
             self, get_pbm_wsdl_loc, validate_vc_version, get_vc_version,
-            validate_params):
+            create_session, validate_params):
         ver_str = '5.5'
         get_vc_version.return_value = ver_str
 
@@ -1779,6 +1797,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                           mock.ANY)
 
         validate_params.assert_called_once_with()
+        create_session.assert_called_once_with()
         get_vc_version.assert_called_once_with()
         validate_vc_version.assert_called_once_with(ver_str)
         get_pbm_wsdl_loc.assert_called_once_with(ver_str)
@@ -2023,11 +2042,12 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             volume['volume_type_id'], 'clone_type',
             default_value=volumeops.FULL_CLONE_TYPE)
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
     @mock.patch.object(VMDK_DRIVER, '_extend_backing')
     def _test_clone_backing(
-            self, extend_backing, select_ds_for_volume, vops,
+            self, extend_backing, select_ds_for_volume, vops, get_disk_type,
             clone_type=volumeops.FULL_CLONE_TYPE, extend_needed=False,
             vc60=False):
         host = mock.sentinel.host
@@ -2039,6 +2059,9 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         clone = mock.sentinel.clone
         vops.clone_backing.return_value = clone
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
 
         if vc60:
             self._driver._vc_version = '6.0'
@@ -2089,7 +2112,8 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                 vops.update_backing_disk_uuid.assert_not_called()
 
         if volume.size > src_vsize:
-            extend_backing.assert_called_once_with(clone, volume.size)
+            extend_backing.assert_called_once_with(clone, volume.size,
+                                                   disk_type)
         else:
             extend_backing.assert_not_called()
 
@@ -2282,13 +2306,49 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             host=host, resource_pool=rp, folder=folder,
             disks_to_clone=[vol_dev_uuid])
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
+    @mock.patch.object(VMDK_DRIVER, 'volumeops')
+    @mock.patch.object(VMDK_DRIVER, '_extend_backing')
+    def _test_extend_backing_if_needed(
+            self, extend_backing, vops, get_disk_type, extend=True):
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
+        if extend:
+            vol_size = 2
+        else:
+            vol_size = 1
+
+        vops.get_disk_size.return_value = units.Gi
+
+        volume = self._create_volume_obj(size=vol_size)
+        backing = mock.sentinel.backing
+        self._driver._extend_if_needed(volume, backing)
+
+        vops.get_disk_size.assert_called_once_with(backing)
+        if extend:
+            extend_backing.assert_called_once_with(backing, vol_size,
+                                                   disk_type)
+        else:
+            extend_backing.assert_not_called()
+
+    def test_extend_backing_if_needed(self):
+        self._test_extend_backing_if_needed()
+
+    def test_extend_backing_if_needed_no_extend(self):
+        self._test_extend_backing_if_needed(extend=False)
+
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_manage_existing_int')
+    @mock.patch.object(VMDK_DRIVER, '_extend_if_needed')
     @mock.patch.object(VMDK_DRIVER, '_delete_temp_backing')
     def test_create_volume_from_temp_backing(
-            self, delete_temp_backing, manage_existing_int, vops):
+            self, delete_temp_backing, extend_if_needed, manage_existing_int,
+            vops):
         disk_device = mock.sentinel.disk_device
         vops._get_disk_device.return_value = disk_device
+
+        backing = mock.sentinel.backing
+        manage_existing_int.return_value = backing
 
         volume = self._create_volume_dict()
         tmp_backing = mock.sentinel.tmp_backing
@@ -2297,6 +2357,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops._get_disk_device.assert_called_once_with(tmp_backing)
         manage_existing_int.assert_called_once_with(
             volume, tmp_backing, disk_device)
+        extend_if_needed.assert_called_once_with(volume, backing)
         delete_temp_backing.assert_called_once_with(tmp_backing)
 
     @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
@@ -2537,6 +2598,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         vops.get_entity_name.assert_called_once_with(dc_ref)
         cookies = session.vim.client.options.transport.cookiejar
         if use_temp_image:
+            mock_open.assert_called_once_with('/tmp/foo', 'rb')
             download_file.assert_called_once_with(
                 mock.sentinel.read_handle,
                 self._config.vmware_host_ip,
@@ -2995,8 +3057,9 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         src_path = mock.sentinel.src_path
         disk_backing = mock.Mock(fileName=src_path)
         disk_device = mock.Mock(backing=disk_backing, capacityInKB=1048576)
-        self._driver._manage_existing_int(volume, vm, disk_device)
+        ret = self._driver._manage_existing_int(volume, vm, disk_device)
 
+        self.assertEqual(backing, ret)
         create_backing.assert_called_once_with(
             volume, create_params={vmdk.CREATE_PARAM_DISK_LESS: True})
         vops.detach_disk_from_backing.assert_called_once_with(vm, disk_device)
@@ -3039,11 +3102,13 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                       volumeops.BACKING_UUID_KEY: ''})
 
     @mock.patch('oslo_vmware.api.VMwareAPISession')
-    def test_session(self, apiSession):
-        self._driver._session = None
+    def test_create_session(self, apiSession):
+        session = mock.sentinel.session
+        apiSession.return_value = session
 
-        self._driver.session()
+        ret = self._driver._create_session()
 
+        self.assertEqual(session, ret)
         config = self._driver.configuration
         apiSession.assert_called_once_with(
             config.vmware_host_ip,
@@ -3052,7 +3117,6 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
             config.vmware_api_retry_count,
             config.vmware_task_poll_interval,
             wsdl_loc=config.safe_get('vmware_wsdl_location'),
-            pbm_wsdl_loc=None,
             port=config.vmware_host_port,
             cacert=config.vmware_ca_file,
             insecure=config.vmware_insecure,
@@ -3069,25 +3133,34 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
 
         self.assertFalse(extend_backing.called)
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_extend_backing')
-    def test_extend_volume(self, extend_backing, vops):
+    def test_extend_volume(self, extend_backing, vops, get_disk_type):
         backing = mock.sentinel.backing
         vops.get_backing.return_value = backing
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
 
         volume = self._create_volume_dict()
         new_size = 2
         self._driver.extend_volume(volume, new_size)
 
-        extend_backing.assert_called_once_with(backing, new_size)
+        extend_backing.assert_called_once_with(backing, new_size, disk_type)
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_extend_backing')
     @mock.patch.object(VMDK_DRIVER, '_select_ds_for_volume')
     def test_extend_volume_with_no_disk_space(self, select_ds_for_volume,
-                                              extend_backing, vops):
+                                              extend_backing, vops,
+                                              get_disk_type):
         backing = mock.sentinel.backing
         vops.get_backing.return_value = backing
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
 
         extend_backing.side_effect = [exceptions.NoDiskSpaceException, None]
 
@@ -3110,16 +3183,20 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
                                                       host)
         vops.move_backing_to_folder(backing, folder)
 
-        extend_backing_calls = [mock.call(backing, new_size),
-                                mock.call(backing, new_size)]
+        extend_backing_calls = [mock.call(backing, new_size, disk_type),
+                                mock.call(backing, new_size, disk_type)]
         self.assertEqual(extend_backing_calls, extend_backing.call_args_list)
 
+    @mock.patch.object(VMDK_DRIVER, '_get_disk_type')
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_extend_backing')
     def test_extend_volume_with_extend_backing_error(
-            self, extend_backing, vops):
+            self, extend_backing, vops, get_disk_type):
         backing = mock.sentinel.backing
         vops.get_backing.return_value = backing
+
+        disk_type = mock.sentinel.disk_type
+        get_disk_type.return_value = disk_type
 
         extend_backing.side_effect = exceptions.VimException("Error")
 
@@ -3127,7 +3204,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         new_size = 2
         self.assertRaises(exceptions.VimException, self._driver.extend_volume,
                           volume, new_size)
-        extend_backing.assert_called_once_with(backing, new_size)
+        extend_backing.assert_called_once_with(backing, new_size, disk_type)
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
     @mock.patch.object(VMDK_DRIVER, '_get_volume_group_folder')
@@ -3163,7 +3240,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         self._driver.revert_to_snapshot(
             mock.sentinel.context, volume, snapshot)
 
-        vops.get_backing.assert_called_once_with(volume.name)
+        vops.get_backing.assert_called_once_with(volume.name, volume.id)
         vops.revert_to_snapshot.assert_not_called()
 
     @mock.patch.object(VMDK_DRIVER, 'volumeops')
@@ -3191,7 +3268,7 @@ class VMwareVcVmdkDriverTestCase(test.TestCase):
         self._driver.revert_to_snapshot(
             mock.sentinel.context, volume, snapshot)
 
-        vops.get_backing.assert_called_once_with(volume.name)
+        vops.get_backing.assert_called_once_with(volume.name, volume.id)
         vops.revert_to_snapshot.assert_called_once_with(backing,
                                                         snapshot.name)
 

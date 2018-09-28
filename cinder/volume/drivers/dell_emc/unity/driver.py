@@ -31,13 +31,17 @@ CONF = cfg.CONF
 
 UNITY_OPTS = [
     cfg.ListOpt('unity_storage_pool_names',
-                default=None,
+                default=[],
                 help='A comma-separated list of storage pool names to be '
                 'used.'),
     cfg.ListOpt('unity_io_ports',
-                default=None,
+                default=[],
                 help='A comma-separated list of iSCSI or FC ports to be used. '
-                     'Each port can be Unix-style glob expressions.')]
+                     'Each port can be Unix-style glob expressions.'),
+    cfg.BoolOpt('remove_empty_host',
+                default=False,
+                help='To remove the host from Unity when the last LUN is '
+                     'detached from it. By default, it is False.')]
 
 CONF.register_opts(UNITY_OPTS, group=configuration.SHARED_CONF_GROUP)
 
@@ -53,9 +57,11 @@ class UnityDriver(driver.ManageableVD,
         2.0.0 - Add thin clone support
         3.0.0 - Add IPv6 support
         3.1.0 - Support revert to snapshot API
+        4.0.0 - Support remove empty host
+        4.2.0 - Support compressed volume
     """
 
-    VERSION = '03.01.00'
+    VERSION = '04.02.00'
     VENDOR = 'Dell EMC'
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "EMC_UNITY_CI"
@@ -122,7 +128,6 @@ class UnityDriver(driver.ManageableVD,
         """Make sure volume is exported."""
         pass
 
-    @zm_utils.add_fc_zone
     def initialize_connection(self, volume, connector):
         """Initializes the connection and returns connection info.
 
@@ -136,6 +141,9 @@ class UnityDriver(driver.ManageableVD,
         and a list of wwns which are visible to the remote wwn(s).
         Example return values:
         FC:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'fibre_channel'
                 'data': {
@@ -148,7 +156,11 @@ class UnityDriver(driver.ManageableVD,
                     }
                 }
             }
+
         iSCSI:
+
+        .. code-block:: json
+
             {
                 'driver_volume_type': 'iscsi'
                 'data': {
@@ -159,13 +171,17 @@ class UnityDriver(driver.ManageableVD,
                     'target_luns': [1, 1],
                 }
             }
-        """
-        return self.adapter.initialize_connection(volume, connector)
 
-    @zm_utils.remove_fc_zone
+        """
+        conn_info = self.adapter.initialize_connection(volume, connector)
+        zm_utils.add_fc_zone(conn_info)
+        return conn_info
+
     def terminate_connection(self, volume, connector, **kwargs):
         """Disallow connection from connector."""
-        return self.adapter.terminate_connection(volume, connector)
+        conn_info = self.adapter.terminate_connection(volume, connector)
+        zm_utils.remove_fc_zone(conn_info)
+        return conn_info
 
     def get_volume_stats(self, refresh=False):
         """Get volume stats.

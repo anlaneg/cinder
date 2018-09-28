@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cinder VERSION\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2018-02-17 00:08+0000\n"
+"POT-Creation-Date: 2018-08-29 01:38+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -22,7 +22,7 @@ msgstr ""
 "Language: fr\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "Generated-By: Babel 2.0\n"
-"X-Generator: Zanata 3.9.6\n"
+"X-Generator: Zanata 4.3.3\n"
 "Language-Team: French\n"
 
 #, python-format
@@ -216,9 +216,6 @@ msgstr "'consistencygroup_id' doit être spécifié"
 
 msgid "'qemu-img info' parsing failed."
 msgstr "Echec de l'analyse syntaxique de 'qemu-img info'."
-
-msgid "'status' must be specified."
-msgstr "'status' doit être spécifié."
 
 #, python-format
 msgid ""
@@ -421,10 +418,6 @@ msgstr "Echec de l'opération RBD de sauvegarde"
 
 msgid "Backup already exists in database."
 msgstr "La sauvegarde existe déjà dans la base de données."
-
-#, python-format
-msgid "Backup driver reported an error: %(message)s"
-msgstr "Le pilote de sauvegarde a signalé une erreur : %(message)s"
 
 msgid "Backup id required"
 msgstr "ID de sauvegarde requis"
@@ -938,10 +931,6 @@ msgstr ""
 msgid "Configuration error: dell_sc_ssn not set."
 msgstr "Erreur de configuration : dell_sc_ssn non défini."
 
-#, python-format
-msgid "Configuration file %(configurationFile)s does not exist."
-msgstr "Le fichier de configuration %(configurationFile)s n'existe pas."
-
 msgid "Configuration is not found."
 msgstr "Configuration introuvable."
 
@@ -1408,11 +1397,6 @@ msgstr "Colonne attendue introuvable dans %(fun)s : %(hdr)s."
 msgid "Did not find the expected key %(key)s in %(fun)s: %(raw)s."
 msgstr "La clé attendue, %(key)s, est introuvable dans %(fun)s : %(raw)s."
 
-msgid "Disabled reason contains invalid characters or is too long"
-msgstr ""
-"La raison de désactivation contient des caractères invalides ou est trop "
-"longue"
-
 #, python-format
 msgid "Domain with name %s wasn't found."
 msgstr "Le domaine nommé %s est introuvable."
@@ -1510,10 +1494,6 @@ msgid ""
 msgstr ""
 "Erreur d'ajout du groupe cible : %(targetgroup)s avec IQN : %(iqn)s Code "
 "retour : %(ret.status)d Message : %(ret.data)s ."
-
-#, python-format
-msgid "Error Attaching volume %(vol)s."
-msgstr "Erreur lors du rattachement du volume %(vol)s."
 
 #, python-format
 msgid ""
@@ -1683,15 +1663,6 @@ msgid ""
 msgstr ""
 "Erreur d'obtention du partage %(share)s sur le pool %(pool)s. Projet: "
 "%(project)s Code retour : %(ret.status)d Message : %(ret.data)s."
-
-#, python-format
-msgid ""
-"Error Getting Snapshot: %(snapshot)s on Volume: %(lun)s to Pool: %(pool)s "
-"Project: %(project)s  Return code: %(ret.status)d Message: %(ret.data)s."
-msgstr ""
-"Erreur d'obtention de l'instantané %(snapshot)s sur le volume %(lun)s vers "
-"le pool %(pool)s Projet : %(project)s  Code retour : %(ret.status)d "
-"Message : %(ret.data)s."
 
 #, python-format
 msgid ""
@@ -1934,6 +1905,10 @@ msgid "Error renaming volume %(vol)s: %(err)s."
 msgstr ""
 "Erreur lors de l'attribution d'un nouveau nom au volume %(vol)s : %(err)s."
 
+#, python-format
+msgid "Error response: %s"
+msgstr "Réponse d'erreur : %s"
+
 msgid "Error retrieving volume size"
 msgstr "Erreur lors de l'obtention de la taille du volume"
 
@@ -2109,12 +2084,6 @@ msgstr ""
 "Erreur [status] %(stat)s - [result] %(res)s] lors de l'obtention de l'ID du "
 "volume."
 
-#, python-format
-msgid ""
-"Exceeded max scheduling attempts %(max_attempts)d for volume %(volume_id)s"
-msgstr ""
-"Tentatives de planification max %(max_attempts)d pour le volume %(volume_id)s"
-
 msgid "Exceeded the limit of snapshots per volume"
 msgstr "Nombre limite d'instantanés par volume dépassé"
 
@@ -2177,12 +2146,6 @@ msgstr ""
 
 msgid "Extend volume error."
 msgstr "Erreur lors de l'extension du volume."
-
-msgid ""
-"Extend volume is only supported for this driver when no snapshots exist."
-msgstr ""
-"L'extension de volume n'est prise en charge pour ce pilote que si aucun "
-"instantané n'est défini."
 
 msgid "Extend volume not implemented"
 msgstr "Extension du volume non implémentée"
@@ -3371,9 +3334,6 @@ msgstr ""
 "suffit parfois d'effectuer une nouvelle tentative de suppression après un "
 "délai de 30 secondes."
 
-msgid "Incorrect request body format"
-msgstr "Format de corps de demande incorrect"
-
 msgid "Incremental backups exist for this backup."
 msgstr "Les sauvegardes incrémentielles existent pour cette sauvegarde."
 
@@ -3587,16 +3547,6 @@ msgstr ""
 msgid "Invalid qos specs: %(reason)s"
 msgstr "Spécifications QoS non valides : %(reason)s"
 
-msgid "Invalid request to attach volume to an invalid target"
-msgstr "Demande non valide de connexion du volume à une cible non valide"
-
-msgid ""
-"Invalid request to attach volume with an invalid mode. Attaching mode should "
-"be 'rw' or 'ro'"
-msgstr ""
-"Demande non valide de rattachement du volume dans un mode non valide. Le "
-"mode d'attachement doit être 'rw' ou 'ro'"
-
 #, python-format
 msgid "Invalid reservation expiration %(expire)s."
 msgstr "Expiration de réservation non valide %(expire)s."
@@ -3640,18 +3590,6 @@ msgstr "Paramètre de mise à jour non valide : '%s'"
 #, python-format
 msgid "Invalid value '%s' for force."
 msgstr "Valeur invalide '%s' pour le 'forçage'."
-
-#, python-format
-msgid "Invalid value for 'bootable': '%s'"
-msgstr "Valeur non valide pour 'bootable': '%s'"
-
-#, python-format
-msgid "Invalid value for 'force': '%s'"
-msgstr "Valeur non valide pour 'force': '%s'"
-
-#, python-format
-msgid "Invalid value for 'readonly': '%s'"
-msgstr "Valeur non valide pour 'readonly': '%s'"
 
 msgid "Invalid value for 'scheduler_max_attempts', must be >=1"
 msgstr "Valeur non valide pour 'scheduler_max_attempts', doit être >= 1"
@@ -3737,14 +3675,6 @@ msgstr ""
 "Le lancement d'un basculement a échoué car la réplication n'a pas été "
 "configurée correctement."
 
-msgid ""
-"Key names can only contain alphanumeric characters, underscores, periods, "
-"colons and hyphens."
-msgstr ""
-"Les noms de clé peuvent seulement contenir des caractères alphanumériques, "
-"des traits de soulignement, des points, des signes deux-points et des traits "
-"d'union."
-
 #, python-format
 msgid "KeyError: %s"
 msgstr "KeyError : %s"
@@ -3817,9 +3747,6 @@ msgstr "Format d'URL de demande incorrect"
 #, python-format
 msgid "Malformed response to command %(cmd)s: %(reason)s"
 msgstr "Format incorrect de la réponse à la commande %(cmd)s : %(reason)s"
-
-msgid "Malformed scheduler_hints attribute"
-msgstr "Format incorrect de l'attribut scheduler_hints"
 
 #, python-format
 msgid "Malformed show fcns database string: %s"
@@ -3929,15 +3856,8 @@ msgstr ""
 msgid "Missing Fibre Channel SAN configuration param - fc_fabric_names"
 msgstr "Paramètre de configuration SAN Fibre Channel - fc_fabric_names"
 
-msgid "Missing request body"
-msgstr "Corps de la demande manquant"
-
 msgid "Missing request body."
 msgstr "Corps de la demande manquant."
-
-#, python-format
-msgid "Missing required element '%s' in request body"
-msgstr "Elément requis manquant '%s' dans le corps de la demande"
 
 #, python-format
 msgid "Missing required element '%s' in request body."
@@ -3976,25 +3896,10 @@ msgstr ""
 "admin) à l'aide d'un fichier Keystone policy.json qui permet à "
 "l'administrateur de cloud de répertorier et d'obtenir n'importe quel projet."
 
-msgid "Must specify 'connector'"
-msgstr "Vous devez spécifier 'connector'"
-
-msgid "Must specify 'new_volume'"
-msgstr "Vous devez spécifier 'new_volume'"
-
-msgid "Must specify 'status'"
-msgstr "Vous devez spécifier 'status'"
-
 msgid ""
 "Must specify 'status', 'attach_status' or 'migration_status' for update."
 msgstr ""
 "Indiquer 'status', 'attach_status' ou 'migration_status' pour la mise à jour."
-
-msgid "Must specify a valid attach status"
-msgstr "Indiquer un état de connexion valide"
-
-msgid "Must specify a valid migration status"
-msgstr "Indiquer un état de migration valide"
 
 #, python-format
 msgid "Must specify a valid persona %(valid)s,value '%(persona)s' is invalid."
@@ -4010,17 +3915,8 @@ msgstr ""
 "Spécifiez un type de mise à disposition valide %(valid)s, la valeur "
 "'%(prov)s' n'est pas valide."
 
-msgid "Must specify a valid status"
-msgstr "Indiquer un état valide"
-
 msgid "Must specify an ExtensionManager class"
 msgstr "Vous devez définir une classe ExtensionManager"
-
-msgid "Must specify bootable in request."
-msgstr "Doit indiquer bootable dans la demande."
-
-msgid "Must specify readonly in request."
-msgstr "Doit indiquer readonly dans la demande."
 
 msgid "Must specify snapshot source-name or source-id."
 msgstr ""
@@ -4090,12 +3986,6 @@ msgstr ""
 "La nouvelle taille doit être supérieure à la taille réelle du stockage du "
 "back-end. Taille réelle : %(oldsize)s, nouvelle taille : %(newsize)s."
 
-msgid "New volume size must be specified as an integer."
-msgstr "La nouvelle taille du volume doit être indiquée comme entier."
-
-msgid "New volume type must be specified."
-msgstr "Le nouveau type de volume doit être indiqué."
-
 msgid "New volume type not specified in request_spec."
 msgstr "Nouveau type de volume non indiqué dans request_spec."
 
@@ -4150,9 +4040,6 @@ msgstr "Aucun portail iSCSI valide détecté pour %s."
 
 msgid "No iSCSI-enabled ports on target array."
 msgstr "Aucun port activé pour iSCSI n'existe sur la matrice cible."
-
-msgid "No image_name was specified in request."
-msgstr "image_name non défini dans la demande."
 
 msgid "No initiator connected to fabric."
 msgstr "Aucun initiateur n'est connecté à l'ensemble de noeuds (fabric)."
@@ -4339,9 +4226,6 @@ msgstr ""
 
 msgid "Path to REST server's certificate must be specified."
 msgstr "Le chemin d'accès au certificat du serveur REST doit être spécifié."
-
-msgid "Please specify a name for QoS specs."
-msgstr "Veuillez indiquer un nom pour les spécifications QoS."
 
 #, python-format
 msgid "Policy doesn't allow %(action)s to be performed."
@@ -4598,12 +4482,6 @@ msgstr "Corps et URI de demande discordants"
 msgid "Request body contains too many items"
 msgstr "Le corps de la demande contient un trop grand nombre d'éléments"
 
-msgid "Request body contains too many items."
-msgstr "Le corps de demande contient trop d'éléments."
-
-msgid "Request body empty"
-msgstr "Le corps de la demande est vide"
-
 #, python-format
 msgid "Request to Datera cluster returned bad status: %(status)s | %(reason)s"
 msgstr ""
@@ -4822,14 +4700,6 @@ msgid "Size for volume: %s not found, cannot secure delete."
 msgstr ""
 "La taille du volume %s est introuvable. Impossible d'effectuer une "
 "suppression sécurisée."
-
-#, python-format
-msgid ""
-"Size is %(image_size)dGB and doesn't fit in a volume of size "
-"%(volume_size)dGB."
-msgstr ""
-"La taille est %(image_size)d Go et ne s'adapte pas dans un volume d'une "
-"taille de %(volume_size)d Go."
 
 #, python-format
 msgid ""
@@ -5094,9 +4964,6 @@ msgid ""
 msgstr ""
 "L'hôte n'est pas prêt à être rebasculé. Resynchronisez les volumes et "
 "reprenez la réplication sur les back-ends LeftHand."
-
-msgid "The key cannot be None."
-msgstr "La clé ne peut pas être nulle."
 
 msgid "The method update_migrated_volume is not implemented."
 msgstr "La méthode update_migrated_volume n'est pas implémentée."
@@ -5517,21 +5384,6 @@ msgid "Unable to find ssh_hosts_key_file: %s"
 msgstr "ssh_hosts_key_file introuvable: %s"
 
 #, python-format
-msgid ""
-"Unable to find viable pg snapshot to use forfailover on selected secondary "
-"array: %(id)s."
-msgstr ""
-"Impossible de trouver un instantané pg viable à utiliser pour le basculement "
-"sur la matrice secondaire sélectionnée : %(id)s."
-
-#, python-format
-msgid ""
-"Unable to find viable secondary array fromconfigured targets: %(targets)s."
-msgstr ""
-"Impossible de trouver une matrice secondaire viable à partir des cibles "
-"configurées : %(targets)s."
-
-#, python-format
 msgid "Unable to find volume %s"
 msgstr "Impossible de trouver le volume %s"
 
@@ -5894,10 +5746,6 @@ msgstr "VV Set %s inexistant."
 #, python-format
 msgid "Valid consumer of QoS specs are: %s"
 msgstr "Client valide de spécifications QoS : %s"
-
-#, python-format
-msgid "Valid control location are: %s"
-msgstr "Emplacement de contrôle valide : %s"
 
 #, python-format
 msgid "Validate volume connection failed (error: %(err)s)."
@@ -6865,9 +6713,6 @@ msgstr "groupe de cohérence (consistencygroup) affecté"
 msgid "consistencygroup changed"
 msgstr "groupe de cohérence (consistencygroup) modifié"
 
-msgid "control_location must be defined"
-msgstr "control_location doit être défini"
-
 msgid "create_cloned_volume, Source Volume does not exist in ETERNUS."
 msgstr "create_cloned_volume,  le volume source n'existe pas dans ETERNUS."
 
@@ -7234,10 +7079,6 @@ msgid "mdiskgrp missing quotes %s"
 msgstr "guillemets manquants pour mdiskgrp %s"
 
 #, python-format
-msgid "migration_policy must be 'on-demand' or 'never', passed: %s"
-msgstr "migration_policy doit être 'on-demand' ou 'never', transmis : %s"
-
-#, python-format
 msgid "mkfs failed on volume %(vol)s, error message was: %(err)s."
 msgstr "mkfs a échoué sur le volume %(vol)s, message d'erreur : %(err)s."
 
@@ -7276,9 +7117,6 @@ msgstr "open_access_enabled n'est pas désactivé."
 
 msgid "progress must be an integer percentage"
 msgstr "la progression doit être un pourcentage d'entier"
-
-msgid "provider must be defined"
-msgstr "fournisseur doit être défini"
 
 #, python-format
 msgid ""

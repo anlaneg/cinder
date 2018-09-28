@@ -44,7 +44,12 @@ class ZFSSAApi(object):
             self.rclient.logout()
 
     def _is_pool_owned(self, pdata):
-        """Returns True if the pool's owner is the same as the host."""
+        """Check pool ownership.
+
+           Returns True if the pool's owner is the same as the host, or
+           the peer, if (and only if) it's stripped from the cluster
+        """
+
         svc = '/api/system/v1/version'
         ret = self.rclient.get(svc)
         if ret.status != restclient.Status.OK:
@@ -58,9 +63,33 @@ class ZFSSAApi(object):
             LOG.error(exception_msg)
             raise exception.VolumeBackendAPIException(data=exception_msg)
 
-        vdata = json.loads(ret.data)
-        return vdata['version']['asn'] == pdata['pool']['asn'] and \
-            vdata['version']['nodename'] == pdata['pool']['owner']
+        vdata = json.loads(ret.data)['version']
+        if vdata['asn'] == pdata['pool']['asn'] and \
+                vdata['nodename'] == pdata['pool']['owner']:
+            return True
+
+        svc = '/api/hardware/v1/cluster'
+        ret = self.rclient.get(svc)
+        if ret.status != restclient.Status.OK:
+            exception_msg = (_('Error getting cluster: '
+                               'svc: %(svc)s.'
+                               'Return code: %(ret.status)d '
+                               'Message: %(ret.data)s.')
+                             % {'svc': svc,
+                                'ret.status': ret.status,
+                                'ret.data': ret.data})
+            LOG.error(exception_msg)
+            raise exception.VolumeBackendAPIException(data=exception_msg)
+
+        cdata = json.loads(ret.data)['cluster']
+        if cdata['peer_asn'] == pdata['pool']['asn'] and \
+                cdata['peer_hostname'] == pdata['pool']['owner'] and \
+                cdata['peer_state'] == 'AKCS_STRIPPED':
+            LOG.warning('Cluster node %(nodename)s is stripped',
+                        {'nodename': pdata['pool']['owner']})
+            return True
+
+        return False
 
     def get_pool_details(self, pool):
         """Get properties of a pool."""
@@ -725,6 +754,62 @@ class ZFSSAApi(object):
         val = json.loads(ret.data)
         return val
 
+    def _canonify_lun_info(self, lun):
+        def _listify(item):
+            return item if isinstance(item, list) else [item]
+
+        if 'com.sun.ms.vss.hg.maskAll' in lun['initiatorgroup']:
+            # Hide special maskAll value when LUN is not currently presented
+            # to any initiatorgroups:
+            initiatorgroup = []
+            number = []
+        else:
+            # For backward-compatibility with 2013.1.2.x, convert
+            # initiatorgroup and number to lists if they're not already
+            initiatorgroup = _listify(lun['initiatorgroup'])
+            number = _listify(lun['assignednumber'])
+
+        canonical = {
+            'name': lun['name'],
+            'guid': lun['lunguid'],
+            'number': number,
+            'initiatorgroup': initiatorgroup,
+            'size': lun['volsize'],
+            'nodestroy': lun['nodestroy'],
+            'targetgroup': lun['targetgroup']
+        }
+        if 'origin' in lun:
+            canonical['origin'] = lun['origin']
+        for custom in ['image_id', 'updated_at', 'cinder_managed']:
+            custom_value = lun.get('custom:' + custom)
+            if custom_value:
+                canonical[custom] = custom_value
+
+        return canonical
+
+    def get_all_luns(self, pool, project):
+        """return all luns in project."""
+        svc = '/api/storage/v1/pools/' + pool + '/projects/' + \
+            project + "/luns"
+        ret = self.rclient.get(svc)
+        if ret.status != restclient.Status.OK:
+            exception_msg = (_('Error Getting LUNs on '
+                               'Pool: %(pool)s '
+                               'Project: %(project)s '
+                               'Return code: %(ret.status)d '
+                               'Message: %(ret.data)s.')
+                             % {'pool': pool,
+                                'project': project,
+                                'ret.status': ret.status,
+                                'ret.data': ret.data})
+            LOG.error(exception_msg)
+            raise exception.VolumeBackendAPIException(data=exception_msg)
+
+        canonical = []
+        for lun in json.loads(ret.data)['luns']:
+            canonical.append(self._canonify_lun_info(lun))
+        return canonical
+
     def get_lun(self, pool, project, lun):
         """return iscsi lun properties."""
         svc = '/api/storage/v1/pools/' + pool + '/projects/' + \
@@ -756,40 +841,7 @@ class ZFSSAApi(object):
             LOG.error(exception_msg)
             raise exception.VolumeBackendAPIException(data=exception_msg)
 
-        val = json.loads(ret.data)
-
-        # For backward-compatibility with 2013.1.2.x, convert initiatorgroup
-        # and number to lists if they're not already
-        def _listify(item):
-            return item if isinstance(item, list) else [item]
-
-        initiatorgroup = _listify(val['lun']['initiatorgroup'])
-        number = _listify(val['lun']['assignednumber'])
-
-        # Hide special maskAll value when LUN is not currently presented to
-        # any initiatorgroups:
-        if 'com.sun.ms.vss.hg.maskAll' in initiatorgroup:
-            initiatorgroup = []
-            number = []
-
-        ret = {
-            'name': val['lun']['name'],
-            'guid': val['lun']['lunguid'],
-            'number': number,
-            'initiatorgroup': initiatorgroup,
-            'size': val['lun']['volsize'],
-            'nodestroy': val['lun']['nodestroy'],
-            'targetgroup': val['lun']['targetgroup']
-        }
-        if 'origin' in val['lun']:
-            ret.update({'origin': val['lun']['origin']})
-        if 'custom:image_id' in val['lun']:
-            ret.update({'image_id': val['lun']['custom:image_id']})
-            ret.update({'updated_at': val['lun']['custom:updated_at']})
-        if 'custom:cinder_managed' in val['lun']:
-            ret.update({'cinder_managed': val['lun']['custom:cinder_managed']})
-
-        return ret
+        return self._canonify_lun_info(json.loads(ret.data)['lun'])
 
     def get_lun_snapshot(self, pool, project, lun, snapshot):
         """Return iscsi lun snapshot properties."""
@@ -797,7 +849,15 @@ class ZFSSAApi(object):
                project + '/luns/' + lun + '/snapshots/' + snapshot)
 
         ret = self.rclient.get(svc)
-        if ret.status != restclient.Status.OK:
+        if ret.status == restclient.Status.NOT_FOUND:
+            LOG.warning('Snapshot %(snapshot)s of volume %(volume)s not '
+                        'found in project %(project)s, pool %(pool)s.',
+                        {'snapshot': snapshot,
+                         'project': project,
+                         'pool': pool,
+                         'volume': lun})
+            raise exception.SnapshotNotFound(snapshot_id=snapshot)
+        elif ret.status != restclient.Status.OK:
             exception_msg = ('Error Getting '
                              'Snapshot: %(snapshot)s of '
                              'Volume: %(lun)s in '
@@ -812,7 +872,7 @@ class ZFSSAApi(object):
                               'ret.status': ret.status,
                               'ret.data': ret.data})
             LOG.error(exception_msg)
-            raise exception.SnapshotNotFound(snapshot_id=snapshot)
+            raise exception.VolumeBackendAPIException(data=exception_msg)
 
         val = json.loads(ret.data)['snapshot']
         ret = {
@@ -992,32 +1052,6 @@ class ZFSSAApi(object):
                                 'ret.data': ret.data})
             LOG.error(exception_msg)
             raise exception.VolumeBackendAPIException(data=exception_msg)
-
-    def num_clones(self, pool, project, lun, snapshot):
-        """Checks whether snapshot has clones or not."""
-        svc = '/api/storage/v1/pools/' + pool + '/projects/' + \
-            project + '/luns/' + lun + '/snapshots/' + snapshot
-
-        ret = self.rclient.get(svc)
-        if ret.status != restclient.Status.OK:
-            exception_msg = (_('Error Getting '
-                               'Snapshot: %(snapshot)s on '
-                               'Volume: %(lun)s to '
-                               'Pool: %(pool)s '
-                               'Project: %(project)s  '
-                               'Return code: %(ret.status)d '
-                               'Message: %(ret.data)s.')
-                             % {'snapshot': snapshot,
-                                'lun': lun,
-                                'pool': pool,
-                                'project': project,
-                                'ret.status': ret.status,
-                                'ret.data': ret.data})
-            LOG.error(exception_msg)
-            raise exception.VolumeBackendAPIException(data=exception_msg)
-
-        val = json.loads(ret.data)
-        return val['snapshot']['numclones']
 
     def get_initiator_initiatorgroup(self, initiator):
         """Returns the initiator group of the initiator."""

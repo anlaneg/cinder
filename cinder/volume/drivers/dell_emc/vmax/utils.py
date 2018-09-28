@@ -16,9 +16,7 @@
 from copy import deepcopy
 import datetime
 import hashlib
-import random
 import re
-from xml.dom import minidom
 
 from cinder.objects.group import Group
 from oslo_log import log as logging
@@ -28,6 +26,7 @@ import six
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields
+from cinder.volume import utils as vol_utils
 from cinder.volume import volume_types
 
 
@@ -38,6 +37,7 @@ FC = 'fc'
 INTERVAL = 'interval'
 RETRIES = 'retries'
 VOLUME_ELEMENT_NAME_PREFIX = 'OS-'
+VMAX_AFA_MODELS = ['VMAX250F', 'VMAX450F', 'VMAX850F', 'VMAX950F']
 MAX_SRP_LENGTH = 16
 TRUNCATE_5 = 5
 TRUNCATE_27 = 27
@@ -56,6 +56,7 @@ PARENT_SG_NAME = 'parent_sg_name'
 CONNECTOR = 'connector'
 VOL_NAME = 'volume_name'
 EXTRA_SPECS = 'extra_specs'
+HOST_NAME = 'short_host_name'
 IS_RE = 'replication_enabled'
 DISABLECOMPRESSION = 'storagetype:disablecompression'
 REP_SYNC = 'Synchronous'
@@ -71,17 +72,27 @@ RDF_ACTIVE = 'active'
 RDF_ACTIVEACTIVE = 'activeactive'
 RDF_ACTIVEBIAS = 'activebias'
 METROBIAS = 'metro_bias'
+DEFAULT_PORT = 8443
+CLONE_SNAPSHOT_NAME = "snapshot_for_clone"
+
+# Multiattach constants
+IS_MULTIATTACH = 'multiattach'
+OTHER_PARENT_SG = 'other_parent_sg_name'
+FAST_SG = 'fast_managed_sg'
+NO_SLO_SG = 'no_slo_sg'
 
 # Cinder.conf vmax configuration
 VMAX_SERVER_IP = 'san_ip'
 VMAX_USER_NAME = 'san_login'
 VMAX_PASSWORD = 'san_password'
-VMAX_SERVER_PORT = 'san_rest_port'
+VMAX_SERVER_PORT_NEW = 'san_api_port'
+VMAX_SERVER_PORT_OLD = 'san_rest_port'
 VMAX_ARRAY = 'vmax_array'
 VMAX_WORKLOAD = 'vmax_workload'
 VMAX_SRP = 'vmax_srp'
 VMAX_SERVICE_LEVEL = 'vmax_service_level'
 VMAX_PORT_GROUPS = 'vmax_port_groups'
+VMAX_SNAPVX_UNLINK_LIMIT = 'vmax_snapvx_unlink_limit'
 
 
 class VMAXUtils(object):
@@ -211,7 +222,7 @@ class VMAXUtils(object):
         """
         element_name = volume_id
         uuid_regex = (re.compile(
-            '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+            r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
             re.I))
         match = uuid_regex.search(volume_id)
         if match:
@@ -299,146 +310,15 @@ class VMAXUtils(object):
             max_over_sub_ratio = 20.0
         return max_over_sub_ratio
 
-    @staticmethod
-    def _process_tag(element, tag_name):
-        """Process the tag to get the value.
+    def get_temp_snap_name(self, source_device_id):
+        """Construct a temporary snapshot name for clone operation
 
-        :param element: the parent element
-        :param tag_name: the tag name
-        :returns: nodeValue(can be None)
-        """
-        node_value = None
-        try:
-            processed_element = element.getElementsByTagName(tag_name)[0]
-            node_value = processed_element.childNodes[0].nodeValue
-            if node_value:
-                node_value = node_value.strip()
-        except IndexError:
-            pass
-        return node_value
-
-    def _get_connection_info(self, rest_element):
-        """Given the filename get the rest server connection details.
-
-        :param rest_element: the rest element
-        :returns: dict -- connargs - the connection info dictionary
-        :raises: VolumeBackendAPIException
-        """
-        connargs = {
-            'RestServerIp': (
-                self._process_tag(rest_element, 'RestServerIp')),
-            'RestServerPort': (
-                self._process_tag(rest_element, 'RestServerPort')),
-            'RestUserName': (
-                self._process_tag(rest_element, 'RestUserName')),
-            'RestPassword': (
-                self._process_tag(rest_element, 'RestPassword'))}
-
-        for k, __ in connargs.items():
-            if connargs[k] is None:
-                exception_message = (_(
-                    "RestServerIp, RestServerPort, RestUserName, "
-                    "RestPassword must have valid values."))
-                LOG.error(exception_message)
-                raise exception.VolumeBackendAPIException(
-                    data=exception_message)
-
-        # These can be None
-        connargs['SSLCert'] = self._process_tag(rest_element, 'SSLCert')
-        connargs['SSLVerify'] = (
-            self._process_tag(rest_element, 'SSLVerify'))
-
-        return connargs
-
-    def parse_file_to_get_array_map(self, file_name):
-        """Parses a file and gets array map.
-
-        Given a file, parse it to get array and pool(srp).
-
-        .. code:: ini
-
-          <EMC>
-          <RestServerIp>10.108.246.202</RestServerIp>
-          <RestServerPort>8443</RestServerPort>
-          <RestUserName>smc</RestUserName>
-          <RestPassword>smc</RestPassword>
-          <SSLCert>/path/client.cert</SSLCert>
-          <SSLVerify>/path/to/certfile.pem</SSLVerify>
-          <PortGroups>
-              <PortGroup>OS-PORTGROUP1-PG</PortGroup>
-          </PortGroups>
-          <Array>000198700439</Array>
-          <SRP>SRP_1</SRP>
-          </EMC>
-
-        :param file_name: the configuration file
-        :returns: list
-        """
-        LOG.warning("Use of xml file in backend configuration is deprecated "
-                    "in Queens and will not be supported in future releases.")
-        kwargs = {}
-        my_file = open(file_name, 'r')
-        data = my_file.read()
-        my_file.close()
-        dom = minidom.parseString(data)
-        try:
-            connargs = self._get_connection_info(dom)
-            portgroup = self._get_random_portgroup(dom)
-            serialnumber = self._process_tag(dom, 'Array')
-            if serialnumber is None:
-                LOG.error("Array Serial Number must be in the file %(file)s.",
-                          {'file': file_name})
-            srp_name = self._process_tag(dom, 'SRP')
-            if srp_name is None:
-                LOG.error("SRP Name must be in the file %(file)s.",
-                          {'file': file_name})
-            slo = self._process_tag(dom, 'ServiceLevel')
-            workload = self._process_tag(dom, 'Workload')
-            kwargs = (
-                {'RestServerIp': connargs['RestServerIp'],
-                 'RestServerPort': connargs['RestServerPort'],
-                 'RestUserName': connargs['RestUserName'],
-                 'RestPassword': connargs['RestPassword'],
-                 'SSLCert': connargs['SSLCert'],
-                 'SSLVerify': connargs['SSLVerify'],
-                 'SerialNumber': serialnumber,
-                 'srpName': srp_name,
-                 'PortGroup': portgroup})
-            if slo is not None:
-                kwargs.update({'ServiceLevel': slo, 'Workload': workload})
-
-        except IndexError:
-            pass
-        return kwargs
-
-    @staticmethod
-    def _get_random_portgroup(element):
-        """Randomly choose a portgroup from list of portgroups.
-
-        :param element: the parent element
-        :returns: the randomly chosen port group
-        """
-        portgroupelements = element.getElementsByTagName('PortGroup')
-        if portgroupelements and len(portgroupelements) > 0:
-            portgroupnames = [portgroupelement.childNodes[0].nodeValue.strip()
-                              for portgroupelement in portgroupelements
-                              if portgroupelement.childNodes]
-            portgroupnames = list(set(filter(None, portgroupnames)))
-            pg_len = len(portgroupnames)
-            if pg_len > 0:
-                return portgroupnames[random.randint(0, pg_len - 1)]
-        return None
-
-    def get_temp_snap_name(self, clone_name, source_device_id):
-        """Construct a temporary snapshot name for clone operation.
-
-        :param clone_name: the name of the clone
         :param source_device_id: the source device id
-        :returns: snap_name
+        :return: snap_name
         """
-        trunc_clone = self.truncate_string(clone_name, 10)
-        snap_name = ("temp-%(device)s-%(clone)s"
-                     % {'device': source_device_id, 'clone': trunc_clone})
+        snap_name = ("temp-%(device)s-%(snap_name)s"
+                     % {'device': source_device_id,
+                        'snap_name': CLONE_SNAPSHOT_NAME})
         return snap_name
 
     @staticmethod
@@ -465,7 +345,7 @@ class VMAXUtils(object):
         else:
             exception_message = (_("Source volume device ID is required."))
             raise exception.VolumeBackendAPIException(
-                data=exception_message)
+                message=exception_message)
         return array, device_id
 
     @staticmethod
@@ -494,6 +374,16 @@ class VMAXUtils(object):
             return False
         else:
             return True
+
+    def change_replication(self, vol_is_replicated, new_type):
+        """Check if volume types have different replication status.
+
+        :param vol_is_replicated: from source
+        :param new_type: from target
+        :return: bool
+        """
+        is_tgt_rep = self.is_replication_enabled(new_type['extra_specs'])
+        return vol_is_replicated != is_tgt_rep
 
     @staticmethod
     def is_replication_enabled(extra_specs):
@@ -530,7 +420,8 @@ class VMAXUtils(object):
                                    "information. Error received: %(ke)s.") %
                                  {'ke': six.text_type(ke)})
                 LOG.exception(error_message)
-                raise exception.VolumeBackendAPIException(data=error_message)
+                raise exception.VolumeBackendAPIException(
+                    message=error_message)
 
             allow_extend = target.get('allow_extend', 'false')
             if strutils.bool_from_string(allow_extend):
@@ -648,7 +539,7 @@ class VMAXUtils(object):
         else:
             msg = (_("Unable to get volume type ids."))
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise exception.VolumeBackendAPIException(message=msg)
 
         if len(arrays) != 1:
             if not arrays:
@@ -660,7 +551,7 @@ class VMAXUtils(object):
                          "associated with volume group: %(groupid)s.")
                        % {'groupid': group.id})
             LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
+            raise exception.VolumeBackendAPIException(message=msg)
         array = arrays.pop()
         intervals_retries_dict = {INTERVAL: interval, RETRIES: retries}
         return array, intervals_retries_dict
@@ -692,9 +583,14 @@ class VMAXUtils(object):
             if 'none' in pool['pool_name'].lower():
                 extra_pools.append(pool)
         for pool in extra_pools:
-            slo = pool['pool_name'].split('+')[0]
-            srp = pool['pool_name'].split('+')[2]
-            array = pool['pool_name'].split('+')[3]
+            try:
+                slo = pool['pool_name'].split('+')[0]
+                srp = pool['pool_name'].split('+')[2]
+                array = pool['pool_name'].split('+')[3]
+            except IndexError:
+                slo = pool['pool_name'].split('+')[0]
+                srp = pool['pool_name'].split('+')[1]
+                array = pool['pool_name'].split('+')[2]
             new_pool_name = ('%(slo)s+%(srp)s+%(array)s'
                              % {'slo': slo, 'srp': srp, 'array': array})
             new_pool = deepcopy(pool)
@@ -801,3 +697,172 @@ class VMAXUtils(object):
                 [REP_ASYNC, REP_METRO]):
             return True
         return False
+
+    def derive_default_sg_from_extra_specs(self, extra_specs, rep_mode=None):
+        """Get the name of the default sg from the extra specs.
+
+        :param extra_specs: extra specs
+        :returns: default sg - string
+        """
+        do_disable_compression = self.is_compression_disabled(
+            extra_specs)
+        rep_enabled = self.is_replication_enabled(extra_specs)
+        return self.get_default_storage_group_name(
+            extra_specs[SRP], extra_specs[SLO],
+            extra_specs[WORKLOAD],
+            is_compression_disabled=do_disable_compression,
+            is_re=rep_enabled, rep_mode=rep_mode)
+
+    @staticmethod
+    def merge_dicts(d1, *args):
+        """Merge dictionaries
+
+        :param d1: dict 1
+        :param *args: one or more dicts
+        :returns: merged dict
+        """
+        d2 = {}
+        for d in args:
+            d2 = d.copy()
+            d2.update(d1)
+            d1 = d2
+        return d2
+
+    @staticmethod
+    def get_temp_failover_grp_name(rep_config):
+        """Get the temporary group name used for failover.
+
+        :param rep_config: the replication config
+        :return: temp_grp_name
+        """
+        temp_grp_name = ("OS-%(rdf)s-temp-rdf-sg"
+                         % {'rdf': rep_config['rdf_group_label']})
+        LOG.debug("The temp rdf managed group name is %(name)s",
+                  {'name': temp_grp_name})
+        return temp_grp_name
+
+    def get_child_sg_name(self, host_name, extra_specs):
+        """Get the child storage group name for a masking view.
+
+        :param host_name: the short host name
+        :param extra_specs: the extra specifications
+        :return: child sg name, compression flag, rep flag, short pg name
+        """
+        do_disable_compression = False
+        pg_name = self.get_pg_short_name(extra_specs[PORTGROUPNAME])
+        rep_enabled = self.is_replication_enabled(extra_specs)
+        if extra_specs[SLO]:
+            slo_wl_combo = self.truncate_string(
+                extra_specs[SLO] + extra_specs[WORKLOAD], 10)
+            unique_name = self.truncate_string(extra_specs[SRP], 12)
+            child_sg_name = (
+                "OS-%(shortHostName)s-%(srpName)s-%(combo)s-%(pg)s"
+                % {'shortHostName': host_name,
+                   'srpName': unique_name,
+                   'combo': slo_wl_combo,
+                   'pg': pg_name})
+            do_disable_compression = self.is_compression_disabled(
+                extra_specs)
+            if do_disable_compression:
+                child_sg_name = ("%(child_sg_name)s-CD"
+                                 % {'child_sg_name': child_sg_name})
+        else:
+            child_sg_name = (
+                "OS-%(shortHostName)s-No_SLO-%(pg)s"
+                % {'shortHostName': host_name, 'pg': pg_name})
+        if rep_enabled:
+            rep_mode = extra_specs.get(REP_MODE, None)
+            child_sg_name += self.get_replication_prefix(rep_mode)
+        return child_sg_name, do_disable_compression, rep_enabled, pg_name
+
+    @staticmethod
+    def change_multiattach(extra_specs, new_type_extra_specs):
+        """Check if a change in multiattach is required for retype.
+
+        :param extra_specs: the source type extra specs
+        :param new_type_extra_specs: the target type extra specs
+        :return: bool
+        """
+        is_src_multiattach = vol_utils.is_replicated_str(
+            extra_specs.get('multiattach'))
+        is_tgt_multiattach = vol_utils.is_replicated_str(
+            new_type_extra_specs.get('multiattach'))
+        return is_src_multiattach != is_tgt_multiattach
+
+    @staticmethod
+    def is_volume_manageable(source_vol):
+        """Check if a volume with verbose description is valid for management.
+
+        :param source_vol: the verbose volume dict
+        :return: bool True/False
+        """
+        vol_head = source_vol['volumeHeader']
+
+        # VMAX disk geometry uses cylinders, so volume sizes are matched to
+        # the nearest full cylinder size: 1GB = 547cyl = 1026MB
+        if vol_head['capMB'] < 1026 or not vol_head['capGB'].is_integer():
+            return False
+
+        if (vol_head['numSymDevMaskingViews'] > 0 or
+                vol_head['mapped'] is True or
+                source_vol['maskingInfo']['masked'] is True):
+            return False
+
+        if (vol_head['status'] != 'Ready' or
+                vol_head['serviceState'] != 'Normal' or
+                vol_head['emulationType'] != 'FBA' or
+                vol_head['configuration'] != 'TDEV' or
+                vol_head['system_resource'] is True or
+                vol_head['private'] is True or
+                vol_head['encapsulated'] is True or
+                vol_head['reservationInfo']['reserved'] is True):
+            return False
+
+        for key, value in source_vol['rdfInfo'].items():
+            if value is True:
+                return False
+
+        if source_vol['timeFinderInfo']['snapVXTgt'] is True:
+            return False
+
+        if vol_head['nameModifier'][0:3] == 'OS-':
+            return False
+
+        return True
+
+    @staticmethod
+    def is_snapshot_manageable(source_vol):
+        """Check if a volume with snapshot description is valid for management.
+
+        :param source_vol: the verbose volume dict
+        :return: bool True/False
+        """
+        vol_head = source_vol['volumeHeader']
+
+        if not source_vol['timeFinderInfo']['snapVXSrc']:
+            return False
+
+        # VMAX disk geometry uses cylinders, so volume sizes are matched to
+        # the nearest full cylinder size: 1GB = 547cyl = 1026MB
+        if (vol_head['capMB'] < 1026 or
+                not vol_head['capGB'].is_integer()):
+            return False
+
+        if (vol_head['emulationType'] != 'FBA' or
+                vol_head['configuration'] != 'TDEV' or
+                vol_head['private'] is True or
+                vol_head['system_resource'] is True):
+            return False
+
+        snap_gen_info = (source_vol['timeFinderInfo']['snapVXSession'][0][
+            'srcSnapshotGenInfo'][0]['snapshotHeader'])
+
+        if (snap_gen_info['snapshotName'][0:3] == 'OS-' or
+                snap_gen_info['snapshotName'][0:5] == 'temp-'):
+            return False
+
+        if (snap_gen_info['expired'] is True
+                or snap_gen_info['generation'] > 0):
+            return False
+
+        return True

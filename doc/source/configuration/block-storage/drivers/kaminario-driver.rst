@@ -72,8 +72,9 @@ Compute and the Block Storage nodes
       # apt-get install sg3-utils multipath-tools
 
 #. In the ``[libvirt]`` section of the ``nova.conf`` configuration file,
-   specify ``iscsi_use_multipath=True``. This option is valid for both iSCSI
+   specify ``volume_use_multipath=True``. This option is valid for both iSCSI
    and FC drivers.
+   In versions prior to Newton, the option was called ``iscsi_use_multipath``.
 
    Additional resources: Kaminario Host Configuration Guide
    for Linux (for configuring multipath)
@@ -270,4 +271,7 @@ Driver options
 The following table contains the configuration options that are specific
 to the Kaminario K2 FC and iSCSI Block Storage drivers.
 
-.. include:: ../../tables/cinder-kaminario.inc
+.. config-table::
+   :config-target: Kaminario
+
+   cinder.volume.drivers.kaminario.kaminario_common

@@ -31,6 +31,9 @@ import os
 import re
 import tempfile
 
+import cryptography
+from cursive import exception as cursive_exception
+from cursive import signature_utils
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -39,6 +42,7 @@ from oslo_utils import imageutils
 from oslo_utils import timeutils
 from oslo_utils import units
 import psutil
+import six
 
 from cinder import exception
 from cinder.i18n import _
@@ -60,8 +64,6 @@ QEMU_IMG_LIMITS = processutils.ProcessLimits(
     cpu_time=8,
     address_space=1 * units.Gi)
 
-VALID_DISK_FORMATS = ('raw', 'vmdk', 'vdi', 'qcow2',
-                      'vhd', 'vhdx', 'ploop')
 
 QEMU_IMG_FORMAT_MAP = {
     # Convert formats of Glance images to how they are processed with qemu-img.
@@ -74,10 +76,6 @@ QEMU_IMG_FORMAT_MAP_INV = {v: k for k, v in QEMU_IMG_FORMAT_MAP.items()}
 QEMU_IMG_VERSION = None
 QEMU_IMG_MIN_FORCE_SHARE_VERSION = [2, 10, 0]
 QEMU_IMG_MIN_CONVERT_LUKS_VERSION = '2.10'
-
-
-def validate_disk_format(disk_format):
-    return disk_format in VALID_DISK_FORMATS
 
 
 def fixup_disk_format(disk_format):
@@ -145,7 +143,7 @@ def _get_qemu_convert_cmd(src, dest, out_format, src_format=None,
 
     if out_format == 'vhd':
         # qemu-img still uses the legacy vpc name
-        out_format == 'vpc'
+        out_format = 'vpc'
 
     cmd = ['qemu-img', 'convert', '-O', out_format]
 
@@ -290,6 +288,74 @@ def resize_image(source, size, run_as_root=False):
     utils.execute(*cmd, run_as_root=run_as_root)
 
 
+def verify_glance_image_signature(context, image_service, image_id, path):
+    verifier = None
+    image_meta = image_service.show(context, image_id)
+    image_properties = image_meta.get('properties', {})
+    img_signature = image_properties.get('img_signature')
+    img_sig_hash_method = image_properties.get('img_signature_hash_method')
+    img_sig_cert_uuid = image_properties.get('img_signature_certificate_uuid')
+    img_sig_key_type = image_properties.get('img_signature_key_type')
+    if all(m is None for m in [img_signature,
+                               img_sig_cert_uuid,
+                               img_sig_hash_method,
+                               img_sig_key_type]):
+        # NOTE(tommylikehu): We won't verify the image signature
+        # if none of the signature metadata presents.
+        return False
+    if any(m is None for m in [img_signature,
+                               img_sig_cert_uuid,
+                               img_sig_hash_method,
+                               img_sig_key_type]):
+            LOG.error('Image signature metadata for image %s is '
+                      'incomplete.', image_id)
+            raise exception.InvalidSignatureImage(image_id=image_id)
+
+    try:
+        verifier = signature_utils.get_verifier(
+            context=context,
+            img_signature_certificate_uuid=img_sig_cert_uuid,
+            img_signature_hash_method=img_sig_hash_method,
+            img_signature=img_signature,
+            img_signature_key_type=img_sig_key_type,
+        )
+    except cursive_exception.SignatureVerificationError:
+        message = _('Failed to get verifier for image: %s') % image_id
+        LOG.error(message)
+        raise exception.ImageSignatureVerificationException(
+            reason=message)
+    if verifier:
+        with fileutils.remove_path_on_error(path):
+            with open(path, "rb") as tem_file:
+                try:
+                    while True:
+                        chunk = tem_file.read(1024)
+                        if chunk:
+                            verifier.update(chunk)
+                        else:
+                            break
+                    verifier.verify()
+                    LOG.info('Image signature verification succeeded '
+                             'for image: %s', image_id)
+                    return True
+                except cryptography.exceptions.InvalidSignature:
+                    message = _('Image signature verification '
+                                'failed for image: %s') % image_id
+                    LOG.error(message)
+                    raise exception.ImageSignatureVerificationException(
+                        reason=message)
+                except Exception as ex:
+                    message = _('Failed to verify signature for '
+                                'image: %(image)s due to '
+                                'error: %(error)s ') % {'image': image_id,
+                                                        'error':
+                                                            six.text_type(ex)}
+                    LOG.error(message)
+                    raise exception.ImageSignatureVerificationException(
+                        reason=message)
+    return False
+
+
 def fetch(context, image_service, image_id, path, _user_id, _project_id):
     # TODO(vish): Improve context handling and add owner and auth data
     #             when it is added to glance.  Right now there is no
@@ -397,19 +463,16 @@ def fetch_verify_image(context, image_service, image_id, dest,
             # NOTE(xqueralt): If the image virtual size doesn't fit in the
             # requested volume there is no point on resizing it because it will
             # generate an unusable image.
-            if size is not None and data.virtual_size > size:
-                params = {'image_size': data.virtual_size, 'volume_size': size}
-                reason = _("Size is %(image_size)dGB and doesn't fit in a "
-                           "volume of size %(volume_size)dGB.") % params
-                raise exception.ImageUnacceptable(image_id=image_id,
-                                                  reason=reason)
+            if size is not None:
+                check_virtual_size(data.virtual_size, size, image_id)
 
 
 def fetch_to_vhd(context, image_service,
-                 image_id, dest, blocksize,
+                 image_id, dest, blocksize, volume_subformat=None,
                  user_id=None, project_id=None, run_as_root=True):
     fetch_to_volume_format(context, image_service, image_id, dest, 'vpc',
-                           blocksize, user_id, project_id,
+                           blocksize, volume_subformat=volume_subformat,
+                           user_id=user_id, project_id=project_id,
                            run_as_root=run_as_root)
 
 
@@ -417,8 +480,8 @@ def fetch_to_raw(context, image_service,
                  image_id, dest, blocksize,
                  user_id=None, project_id=None, size=None, run_as_root=True):
     fetch_to_volume_format(context, image_service, image_id, dest, 'raw',
-                           blocksize, user_id, project_id, size,
-                           run_as_root=run_as_root)
+                           blocksize, user_id=user_id, project_id=project_id,
+                           size=size, run_as_root=run_as_root)
 
 
 def fetch_to_volume_format(context, image_service,
@@ -465,16 +528,12 @@ def fetch_to_volume_format(context, image_service,
             return
 
         data = qemu_img_info(tmp, run_as_root=run_as_root)
-        virt_size = int(math.ceil(float(data.virtual_size) / units.Gi))
 
         # NOTE(xqueralt): If the image virtual size doesn't fit in the
         # requested volume there is no point on resizing it because it will
         # generate an unusable image.
-        if size is not None and virt_size > size:
-            params = {'image_size': virt_size, 'volume_size': size}
-            reason = _("Size is %(image_size)dGB and doesn't fit in a "
-                       "volume of size %(volume_size)dGB.") % params
-            raise exception.ImageUnacceptable(image_id=image_id, reason=reason)
+        if size is not None:
+            check_virtual_size(data.virtual_size, size, image_id)
 
         fmt = data.file_format
         if fmt is None:
@@ -488,10 +547,6 @@ def fetch_to_volume_format(context, image_service,
                 image_id=image_id,
                 reason=_("fmt=%(fmt)s backed by:%(backing_file)s")
                 % {'fmt': fmt, 'backing_file': backing_file, })
-
-        # NOTE(e0ne): check for free space in destination directory before
-        # image conversion.
-        check_available_space(dest, data.virtual_size, image_id)
 
         # NOTE(jdg): I'm using qemu-img convert to write
         # to the volume regardless if it *needs* conversion or not
@@ -587,9 +642,11 @@ def check_available_space(dest, image_size, image_id):
 
     free_space = psutil.disk_usage(dest).free
     if free_space <= image_size:
-        msg = ('There is no space to convert image. '
-               'Requested: %(image_size)s, available: %(free_space)s'
-               ) % {'image_size': image_size, 'free_space': free_space}
+        msg = ('There is no space on %(dest_dir)s to convert image. '
+               'Requested: %(image_size)s, available: %(free_space)s.'
+               ) % {'dest_dir': dest,
+                    'image_size': image_size,
+                    'free_space': free_space}
         raise exception.ImageTooBig(image_id=image_id, reason=msg)
 
 
@@ -629,9 +686,7 @@ def coalesce_vhd(vhd_path):
 
 
 def create_temporary_file(*args, **kwargs):
-    if (CONF.image_conversion_dir and not
-            os.path.exists(CONF.image_conversion_dir)):
-        os.makedirs(CONF.image_conversion_dir)
+    fileutils.ensure_tree(CONF.image_conversion_dir)
 
     fd, tmp = tempfile.mkstemp(dir=CONF.image_conversion_dir, *args, **kwargs)
     os.close(fd)
@@ -673,9 +728,7 @@ def temporary_file(*args, **kwargs):
 
 
 def temporary_dir():
-    if (CONF.image_conversion_dir and not
-            os.path.exists(CONF.image_conversion_dir)):
-        os.makedirs(CONF.image_conversion_dir)
+    fileutils.ensure_tree(CONF.image_conversion_dir)
 
     return utils.tempdir(dir=CONF.image_conversion_dir)
 

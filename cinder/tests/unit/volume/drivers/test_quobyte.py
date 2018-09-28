@@ -15,14 +15,17 @@
 #    under the License.
 """Unit tests for the Quobyte driver module."""
 
+import ddt
 import errno
 import os
 import psutil
+import shutil
 import six
 import traceback
 
 import mock
 from oslo_concurrency import processutils as putils
+from oslo_utils import fileutils
 from oslo_utils import imageutils
 from oslo_utils import units
 
@@ -34,6 +37,7 @@ from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 from cinder.volume import configuration as conf
 from cinder.volume.drivers import quobyte
+from cinder.volume.drivers import remotefs
 
 
 class FakeDb(object):
@@ -46,21 +50,39 @@ class FakeDb(object):
         """Mock this if you want results from it."""
         return []
 
+    def volume_get_all(self, *a, **kw):
+        return []
 
+
+@ddt.ddt
 class QuobyteDriverTestCase(test.TestCase):
     """Test case for Quobyte driver."""
 
     TEST_QUOBYTE_VOLUME = 'quobyte://quobyte-host/openstack-volumes'
     TEST_QUOBYTE_VOLUME_WITHOUT_PROTOCOL = 'quobyte-host/openstack-volumes'
     TEST_SIZE_IN_GB = 1
-    TEST_MNT_POINT = '/mnt/quobyte'
-    TEST_MNT_POINT_BASE = '/mnt'
+    TEST_MNT_HASH = "1331538734b757ed52d0e18c0a7210cd"
+    TEST_MNT_POINT_BASE = '/fake-mnt'
+    TEST_MNT_POINT = os.path.join(TEST_MNT_POINT_BASE, TEST_MNT_HASH)
     TEST_FILE_NAME = 'test.txt'
     TEST_SHARES_CONFIG_FILE = '/etc/cinder/test-shares.conf'
     TEST_TMP_FILE = '/tmp/tempfile'
     VOLUME_UUID = 'abcdefab-cdef-abcd-efab-cdefabcdefab'
     SNAP_UUID = 'bacadaca-baca-daca-baca-dacadacadaca'
     SNAP_UUID_2 = 'bebedede-bebe-dede-bebe-dedebebedede'
+    CACHE_NAME = quobyte.QuobyteDriver.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME
+
+    def _get_fake_snapshot(self, src_volume):
+        snapshot = fake_snapshot.fake_snapshot_obj(
+            self.context,
+            volume_name=src_volume.name,
+            display_name='clone-snap-%s' % src_volume.id,
+            size=src_volume.size,
+            volume_size=src_volume.size,
+            volume_id=src_volume.id,
+            id=self.SNAP_UUID)
+        snapshot.volume = src_volume
+        return snapshot
 
     def setUp(self):
         super(QuobyteDriverTestCase, self).setUp()
@@ -76,12 +98,16 @@ class QuobyteDriverTestCase(test.TestCase):
             self.TEST_MNT_POINT_BASE
         self._configuration.nas_secure_file_operations = "auto"
         self._configuration.nas_secure_file_permissions = "auto"
+        self._configuration.quobyte_volume_from_snapshot_cache = False
+        self._configuration.quobyte_overlay_volumes = False
 
         self._driver =\
             quobyte.QuobyteDriver(configuration=self._configuration,
                                   db=FakeDb())
         self._driver.shares = {}
         self._driver.set_nas_security_options(is_new_cinder_install=False)
+        self._driver.base = self._configuration.quobyte_mount_point_base
+
         self.context = context.get_admin_context()
 
     def assertRaisesAndMessageMatches(
@@ -107,6 +133,26 @@ class QuobyteDriverTestCase(test.TestCase):
         mypart.mountpoint = self.TEST_MNT_POINT
         return [mypart]
 
+    @mock.patch.object(os, "symlink")
+    def test__create_overlay_volume_from_snapshot(self, os_sl_mock):
+        drv = self._driver
+        drv._execute = mock.Mock()
+        vol = self._simple_volume()
+        snap = self._get_fake_snapshot(vol)
+        r_path = os.path.join(drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                              snap.id)
+        vol_path = drv._local_path_volume(vol)
+
+        drv._create_overlay_volume_from_snapshot(vol, snap, 1, "qcow2")
+
+        drv._execute.assert_called_once_with(
+            'qemu-img', 'create', '-f', 'qcow2', '-o',
+            'backing_file=%s,backing_fmt=qcow2' % (r_path), vol_path, "1G",
+            run_as_root=drv._execute_as_root)
+        os_sl_mock.assert_called_once_with(
+            drv.local_path(vol),
+            drv._local_volume_from_snap_cache_path(snap) + '.child-' + vol.id)
+
     def test__create_regular_file(self):
         with mock.patch.object(self._driver, "_execute") as qb_exec_mock:
             tmp_path = "/path/for/test"
@@ -115,8 +161,202 @@ class QuobyteDriverTestCase(test.TestCase):
             self._driver._create_regular_file(tmp_path, test_size)
 
             qb_exec_mock.assert_called_once_with(
-                'fallocate', '-l', '%sG' % test_size, tmp_path,
+                'fallocate', '-l', '%sGiB' % test_size, tmp_path,
                 run_as_root=self._driver._execute_as_root)
+
+    @mock.patch.object(os, "makedirs")
+    @mock.patch.object(os.path, "join", return_value="dummy_path")
+    @mock.patch.object(os, "access", return_value=True)
+    def test__ensure_volume_cache_ok(self, os_access_mock, os_join_mock,
+                                     os_makedirs_mock):
+        tmp_path = "/some/random/path"
+
+        self._driver._ensure_volume_from_snap_cache(tmp_path)
+
+        calls = [mock.call("dummy_path", os.F_OK),
+                 mock.call("dummy_path", os.R_OK),
+                 mock.call("dummy_path", os.W_OK),
+                 mock.call("dummy_path", os.X_OK)]
+        os_access_mock.assert_has_calls(calls)
+        os_join_mock.assert_called_once_with(
+            tmp_path, self._driver.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME)
+        self.assertFalse(os_makedirs_mock.called)
+
+    @mock.patch.object(fileutils, "ensure_tree")
+    @mock.patch.object(os.path, "join", return_value="dummy_path")
+    @mock.patch.object(os, "access", return_value=True)
+    def test__ensure_volume_cache_create(self, os_access_mock, os_join_mock,
+                                         os_makedirs_mock):
+        tmp_path = "/some/random/path"
+        os_access_mock.side_effect = [False, True, True, True]
+
+        self._driver._ensure_volume_from_snap_cache(tmp_path)
+
+        calls = [mock.call("dummy_path", os.F_OK),
+                 mock.call("dummy_path", os.R_OK),
+                 mock.call("dummy_path", os.W_OK),
+                 mock.call("dummy_path", os.X_OK)]
+        os_access_mock.assert_has_calls(calls)
+        os_join_mock.assert_called_once_with(
+            tmp_path, self._driver.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME)
+        os_makedirs_mock.assert_called_once_with("dummy_path")
+
+    @mock.patch.object(os, "makedirs")
+    @mock.patch.object(os.path, "join", return_value="dummy_path")
+    @mock.patch.object(os, "access", return_value=True)
+    def test__ensure_volume_cache_error(self, os_access_mock, os_join_mock,
+                                        os_makedirs_mock):
+        tmp_path = "/some/random/path"
+        os_access_mock.side_effect = [True, False, False, False]
+
+        self.assertRaises(
+            exception.VolumeDriverException,
+            self._driver._ensure_volume_from_snap_cache, tmp_path)
+
+        calls = [mock.call("dummy_path", os.F_OK),
+                 mock.call("dummy_path", os.R_OK)]
+        os_access_mock.assert_has_calls(calls)
+        os_join_mock.assert_called_once_with(
+            tmp_path, self._driver.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME)
+        self.assertFalse(os_makedirs_mock.called)
+
+    @mock.patch.object(remotefs.RemoteFSSnapDriverDistributed,
+                       "_get_backing_chain_for_path")
+    @ddt.data(
+        [[], []],
+        [[{'filename': "A"}, {'filename': CACHE_NAME}], [{'filename': "A"}]],
+        [[{'filename': "A"}, {'filename': "B"}], [{'filename': "A"},
+                                                  {'filename': "B"}]]
+    )
+    @ddt.unpack
+    def test__get_backing_chain_for_path(self, test_chain,
+                                         result_chain, rfs_chain_mock):
+        drv = self._driver
+        rfs_chain_mock.return_value = test_chain
+
+        result = drv._get_backing_chain_for_path("foo", "bar")
+
+        self.assertEqual(result_chain, result)
+
+    @mock.patch.object(image_utils, 'qemu_img_info')
+    @mock.patch('os.path.basename')
+    def _test__qemu_img_info(self, mock_basename, mock_qemu_img_info,
+                             backing_file, base_dir, valid_backing_file=True):
+        drv = self._driver
+        drv._execute_as_root = True
+        fake_vol_name = "volume-" + self.VOLUME_UUID
+        mock_info = mock_qemu_img_info.return_value
+        mock_info.image = mock.sentinel.image_path
+        mock_info.backing_file = backing_file
+
+        drv._VALID_IMAGE_EXTENSIONS = ['raw', 'qcow2']
+
+        mock_basename.side_effect = [mock.sentinel.image_basename,
+                                     mock.sentinel.backing_file_basename]
+
+        if valid_backing_file:
+            img_info = drv._qemu_img_info_base(
+                mock.sentinel.image_path, fake_vol_name, base_dir)
+            self.assertEqual(mock_info, img_info)
+            self.assertEqual(mock.sentinel.image_basename,
+                             mock_info.image)
+            expected_basename_calls = [mock.call(mock.sentinel.image_path)]
+            if backing_file:
+                self.assertEqual(mock.sentinel.backing_file_basename,
+                                 mock_info.backing_file)
+                expected_basename_calls.append(mock.call(backing_file))
+            mock_basename.assert_has_calls(expected_basename_calls)
+        else:
+            self.assertRaises(exception.RemoteFSInvalidBackingFile,
+                              drv._qemu_img_info_base,
+                              mock.sentinel.image_path,
+                              fake_vol_name, base_dir)
+
+        mock_qemu_img_info.assert_called_with(mock.sentinel.image_path,
+                                              force_share=True,
+                                              run_as_root=True)
+
+    @ddt.data(['/other_random_path', '/mnt'],
+              ['/other_basedir/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID,
+               '/fake_basedir'],
+              ['/mnt/invalid_hash/volume-' + VOLUME_UUID, '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/invalid_vol_name', '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID + '.info',
+               '/fake_basedir'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID +
+               '.random-suffix', '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID +
+               '.invalidext', '/mnt'])
+    @ddt.unpack
+    def test__qemu_img_info_invalid_backing_file(self, backing_file, basedir):
+        self._test__qemu_img_info(backing_file=backing_file, base_dir=basedir,
+                                  valid_backing_file=False)
+
+    @ddt.data([None, '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID,
+               '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID + '.qcow2',
+               '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID +
+               '.404f-404', '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/volume-' + VOLUME_UUID +
+               '.tmp-snap-404f-404', '/mnt'])
+    @ddt.unpack
+    def test__qemu_img_info_valid_backing_file(self, backing_file, basedir):
+        self._test__qemu_img_info(backing_file=backing_file, base_dir=basedir)
+
+    @ddt.data(['/mnt/' + TEST_MNT_HASH + '/' + CACHE_NAME + '/' + VOLUME_UUID,
+               '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/' + CACHE_NAME + '/' + VOLUME_UUID +
+               '.child-aaaaa', '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/' + CACHE_NAME + '/' + VOLUME_UUID +
+               '.parent-bbbbbb', '/mnt'],
+              ['/mnt/' + TEST_MNT_HASH + '/' + CACHE_NAME + '/tmp-snap-' +
+               VOLUME_UUID, '/mnt'])
+    @ddt.unpack
+    def test__qemu_img_info_valid_cache_backing_file(self, backing_file,
+                                                     basedir):
+        self._test__qemu_img_info(backing_file=backing_file, base_dir=basedir)
+
+    @mock.patch.object(os, "listdir", return_value=["fake_vol"])
+    @mock.patch.object(fileutils, "delete_if_exists")
+    def test__remove_from_vol_cache_no_refs(self, fu_die_mock, os_list_mock):
+        drv = self._driver
+        volume = self._simple_volume()
+        cache_path = drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME + "/fake_vol"
+        suf = ".test_suffix"
+
+        drv._remove_from_vol_cache(cache_path, suf, volume)
+
+        fu_die_mock.assert_has_calls([
+            mock.call(os.path.join(drv._local_volume_dir(volume),
+                                   drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                                   "fake_vol.test_suffix")),
+            mock.call(os.path.join(drv._local_volume_dir(volume),
+                                   drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                                   "fake_vol"))])
+        os_list_mock.assert_called_once_with(os.path.join(
+            drv._local_volume_dir(volume),
+            drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME))
+
+    @mock.patch.object(os, "listdir", return_value=["fake_vol",
+                                                    "fake_vol.more_ref"])
+    @mock.patch.object(fileutils, "delete_if_exists")
+    def test__remove_from_vol_cache_with_refs(self, fu_die_mock, os_list_mock):
+        drv = self._driver
+        volume = self._simple_volume()
+        cache_path = drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME + "/fake_vol"
+        suf = ".test_suffix"
+
+        drv._remove_from_vol_cache(cache_path, suf, volume)
+
+        fu_die_mock.assert_called_once_with(
+            os.path.join(drv._local_volume_dir(volume),
+                         drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                         "fake_vol.test_suffix"))
+        os_list_mock.assert_called_once_with(os.path.join(
+            drv._local_volume_dir(volume),
+            drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME))
 
     def test_local_path(self):
         """local_path common use case."""
@@ -125,13 +365,14 @@ class QuobyteDriverTestCase(test.TestCase):
         volume = self._simple_volume(_name_id=vol_id)
 
         self.assertEqual(
-            '/mnt/1331538734b757ed52d0e18c0a7210cd/volume-%s' % vol_id,
+            os.path.join(self.TEST_MNT_POINT, 'volume-%s' % vol_id),
             drv.local_path(volume))
 
     def test_mount_quobyte_should_mount_correctly(self):
         with mock.patch.object(self._driver, '_execute') as mock_execute, \
                 mock.patch('cinder.volume.drivers.quobyte.QuobyteDriver'
                            '.read_proc_mount') as mock_open, \
+                mock.patch('oslo_utils.fileutils.ensure_tree') as mock_mkdir, \
                 mock.patch('cinder.volume.drivers.quobyte.QuobyteDriver'
                            '._validate_volume') as mock_validate:
             # Content of /proc/mount (not mounted yet).
@@ -141,14 +382,13 @@ class QuobyteDriverTestCase(test.TestCase):
             self._driver._mount_quobyte(self.TEST_QUOBYTE_VOLUME,
                                         self.TEST_MNT_POINT)
 
-            mkdir_call = mock.call('mkdir', '-p', self.TEST_MNT_POINT)
-
+            mock_mkdir.assert_called_once_with(self.TEST_MNT_POINT)
             mount_call = mock.call(
                 'mount.quobyte', '--disable-xattrs', self.TEST_QUOBYTE_VOLUME,
                 self.TEST_MNT_POINT, run_as_root=False)
 
             mock_execute.assert_has_calls(
-                [mkdir_call, mount_call], any_order=False)
+                [mount_call], any_order=False)
             mock_validate.called_once_with(self.TEST_MNT_POINT)
 
     def test_mount_quobyte_already_mounted_detected_seen_in_proc_mount(self):
@@ -166,8 +406,8 @@ class QuobyteDriverTestCase(test.TestCase):
                                         self.TEST_MNT_POINT)
             mock_validate.assert_called_once_with(self.TEST_MNT_POINT)
 
-    def test_mount_quobyte_should_suppress_and_log_already_mounted_error(self):
-        """test_mount_quobyte_should_suppress_and_log_already_mounted_error
+    def test_mount_quobyte_should_suppress_already_mounted_error(self):
+        """test_mount_quobyte_should_suppress_already_mounted_error
 
            Based on /proc/mount, the file system is not mounted yet. However,
            mount.quobyte returns with an 'already mounted' error. This is
@@ -175,12 +415,14 @@ class QuobyteDriverTestCase(test.TestCase):
            successful.
 
            Because _mount_quobyte gets called with ensure=True, the error will
-           be suppressed and logged instead.
+           be suppressed instead.
         """
         with mock.patch.object(self._driver, '_execute') as mock_execute, \
                 mock.patch('cinder.volume.drivers.quobyte.QuobyteDriver'
                            '.read_proc_mount') as mock_open, \
-                mock.patch('cinder.volume.drivers.quobyte.LOG') as mock_LOG:
+                mock.patch('oslo_utils.fileutils.ensure_tree') as mock_mkdir, \
+                mock.patch('cinder.volume.drivers.quobyte.QuobyteDriver'
+                           '._validate_volume') as mock_validate:
             # Content of /proc/mount (empty).
             mock_open.return_value = six.StringIO()
             mock_execute.side_effect = [None, putils.ProcessExecutionError(
@@ -190,23 +432,22 @@ class QuobyteDriverTestCase(test.TestCase):
                                         self.TEST_MNT_POINT,
                                         ensure=True)
 
-            mkdir_call = mock.call('mkdir', '-p', self.TEST_MNT_POINT)
+            mock_mkdir.assert_called_once_with(self.TEST_MNT_POINT)
             mount_call = mock.call(
                 'mount.quobyte', '--disable-xattrs', self.TEST_QUOBYTE_VOLUME,
                 self.TEST_MNT_POINT, run_as_root=False)
-            mock_execute.assert_has_calls([mkdir_call, mount_call],
+            mock_execute.assert_has_calls([mount_call],
                                           any_order=False)
-
-            mock_LOG.warning.assert_called_once_with('%s is already mounted',
-                                                     self.TEST_QUOBYTE_VOLUME)
+            mock_validate.assert_called_once_with(self.TEST_MNT_POINT)
 
     def test_mount_quobyte_should_reraise_already_mounted_error(self):
         """test_mount_quobyte_should_reraise_already_mounted_error
 
-        Like test_mount_quobyte_should_suppress_and_log_already_mounted_error
+        Like test_mount_quobyte_should_suppress_already_mounted_error
         but with ensure=False.
         """
         with mock.patch.object(self._driver, '_execute') as mock_execute, \
+                mock.patch('oslo_utils.fileutils.ensure_tree') as mock_mkdir, \
                 mock.patch('cinder.volume.drivers.quobyte.QuobyteDriver'
                            '.read_proc_mount') as mock_open:
             mock_open.return_value = six.StringIO()
@@ -215,24 +456,24 @@ class QuobyteDriverTestCase(test.TestCase):
                 putils.ProcessExecutionError(  # mount
                     stderr='is busy or already mounted')]
 
-            self.assertRaises(putils.ProcessExecutionError,
+            self.assertRaises(exception.VolumeDriverException,
                               self._driver._mount_quobyte,
                               self.TEST_QUOBYTE_VOLUME,
                               self.TEST_MNT_POINT,
                               ensure=False)
 
-            mkdir_call = mock.call('mkdir', '-p', self.TEST_MNT_POINT)
+            mock_mkdir.assert_called_once_with(self.TEST_MNT_POINT)
             mount_call = mock.call(
                 'mount.quobyte', '--disable-xattrs', self.TEST_QUOBYTE_VOLUME,
                 self.TEST_MNT_POINT, run_as_root=False)
-            mock_execute.assert_has_calls([mkdir_call, mount_call],
+            mock_execute.assert_has_calls([mount_call],
                                           any_order=False)
 
     def test_get_hash_str(self):
         """_get_hash_str should calculation correct value."""
         drv = self._driver
 
-        self.assertEqual('1331538734b757ed52d0e18c0a7210cd',
+        self.assertEqual(self.TEST_MNT_HASH,
                          drv._get_hash_str(self.TEST_QUOBYTE_VOLUME))
 
     def test_get_available_capacity_with_df(self):
@@ -354,6 +595,32 @@ class QuobyteDriverTestCase(test.TestCase):
 
         qb_snso_mock.assert_called_once_with(is_new_cinder_install=mock.ANY)
 
+    @mock.patch.object(quobyte.QuobyteDriver, "set_nas_security_options")
+    def test_do_setup_overlay(self, qb_snso_mock):
+        """do_setup runs successfully."""
+        drv = self._driver
+        drv.configuration.quobyte_qcow2_volumes = True
+        drv.configuration.quobyte_overlay_volumes = True
+        drv.configuration.quobyte_volume_from_snapshot_cache = True
+
+        drv.do_setup(mock.create_autospec(context.RequestContext))
+
+        qb_snso_mock.assert_called_once_with(is_new_cinder_install=mock.ANY)
+        self.assertTrue(drv.configuration.quobyte_overlay_volumes)
+
+    @mock.patch.object(quobyte.QuobyteDriver, "set_nas_security_options")
+    def test_do_setup_no_overlay(self, qb_snso_mock):
+        """do_setup runs successfully."""
+        drv = self._driver
+        drv.configuration.quobyte_overlay_volumes = True
+        drv.configuration.quobyte_volume_from_snapshot_cache = True
+        drv.configuration.quobyte_qcow2_volumes = False
+
+        drv.do_setup(mock.create_autospec(context.RequestContext))
+
+        qb_snso_mock.assert_called_once_with(is_new_cinder_install=mock.ANY)
+        self.assertFalse(drv.configuration.quobyte_overlay_volumes)
+
     def test_check_for_setup_error_throws_quobyte_volume_url_not_set(self):
         """check_for_setup_error throws if 'quobyte_volume_url' is not set."""
         drv = self._driver
@@ -433,6 +700,7 @@ class QuobyteDriverTestCase(test.TestCase):
         updates = {'id': self.VOLUME_UUID,
                    'provider_location': self.TEST_QUOBYTE_VOLUME,
                    'display_name': 'volume-%s' % self.VOLUME_UUID,
+                   'name': 'volume-%s' % self.VOLUME_UUID,
                    'size': 10,
                    'status': 'available'}
 
@@ -549,6 +817,9 @@ class QuobyteDriverTestCase(test.TestCase):
                 mock_local_path_volume, \
                 mock.patch.object(self._driver, '_local_path_volume_info') as \
                 mock_local_path_volume_info:
+            self._driver._qemu_img_info = mock.Mock()
+            self._driver._qemu_img_info.return_value = mock.Mock()
+            self._driver._qemu_img_info.return_value.backing_file = None
             mock_local_volume_dir.return_value = self.TEST_MNT_POINT
             mock_active_image_from_info.return_value = volume_filename
             mock_local_path_volume.return_value = volume_path
@@ -568,23 +839,77 @@ class QuobyteDriverTestCase(test.TestCase):
             mock_delete_if_exists.assert_any_call(volume_path)
             mock_delete_if_exists.assert_any_call(info_file)
 
-    def test_delete_should_ensure_share_mounted(self):
+    @mock.patch.object(os, 'access', return_value=True)
+    @mock.patch('oslo_utils.fileutils.delete_if_exists')
+    def test_delete_volume_backing_file(self, mock_delete_if_exists,
+                                        os_acc_mock):
+        drv = self._driver
+        volume = self._simple_volume()
+        volume_filename = 'volume-%s' % self.VOLUME_UUID
+        volume_path = '%s/%s' % (self.TEST_MNT_POINT, volume_filename)
+        info_file = volume_path + '.info'
+        drv._ensure_share_mounted = mock.Mock()
+        drv._local_volume_dir = mock.Mock()
+        drv._local_volume_dir.return_value = self.TEST_MNT_POINT
+        drv.get_active_image_from_info = mock.Mock()
+        drv.get_active_image_from_info.return_value = volume_filename
+        drv._qemu_img_info = mock.Mock()
+        drv._qemu_img_info.return_value = mock.Mock()
+        drv._qemu_img_info.return_value.backing_file = os.path.join(
+            drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME, "cached_volume_file")
+        drv._remove_from_vol_cache = mock.Mock()
+        drv._execute = mock.Mock()
+        drv._local_path_volume = mock.Mock()
+        drv._local_path_volume.return_value = volume_path
+        drv._local_path_volume_info = mock.Mock()
+        drv._local_path_volume_info.return_value = info_file
+
+        drv.delete_volume(volume)
+
+        drv._ensure_share_mounted.assert_called_once_with(
+            volume['provider_location'])
+        drv._local_volume_dir.assert_called_once_with(volume)
+        drv.get_active_image_from_info.assert_called_once_with(volume)
+        drv._qemu_img_info.assert_called_once_with(
+            drv.local_path(volume), drv.get_active_image_from_info())
+        drv._remove_from_vol_cache.assert_called_once_with(
+            drv._qemu_img_info().backing_file, ".child-" + volume.id, volume)
+        drv._execute.assert_called_once_with('rm', '-f', volume_path,
+                                             run_as_root=
+                                             self._driver._execute_as_root)
+        drv._local_path_volume.assert_called_once_with(volume)
+        drv._local_path_volume_info.assert_called_once_with(volume)
+        mock_delete_if_exists.assert_any_call(volume_path)
+        mock_delete_if_exists.assert_any_call(info_file)
+        os_acc_mock.assert_called_once_with(drv._local_path_volume(volume),
+                                            os.F_OK)
+
+    @mock.patch.object(os, 'access', return_value=True)
+    def test_delete_should_ensure_share_mounted(self, os_acc_mock):
         """delete_volume should ensure that corresponding share is mounted."""
         drv = self._driver
-
         drv._execute = mock.Mock()
-
+        drv._qemu_img_info = mock.Mock()
+        drv._qemu_img_info.return_value = mock.Mock()
+        drv._qemu_img_info.return_value.backing_file = "/virtual/test/file"
         volume = self._simple_volume(display_name='volume-123')
-
         drv._ensure_share_mounted = mock.Mock()
+        drv._remove_from_vol_cache = mock.Mock()
 
         drv.delete_volume(volume)
 
         (drv._ensure_share_mounted.
          assert_called_once_with(self.TEST_QUOBYTE_VOLUME))
+        drv._qemu_img_info.assert_called_once_with(
+            drv._local_path_volume(volume),
+            drv.get_active_image_from_info(volume))
+        # backing file is not in cache, no cache cleanup:
+        self.assertFalse(drv._remove_from_vol_cache.called)
         drv._execute.assert_called_once_with('rm', '-f',
-                                             mock.ANY,
+                                             drv.local_path(volume),
                                              run_as_root=False)
+        os_acc_mock.assert_called_once_with(drv._local_path_volume(volume),
+                                            os.F_OK)
 
     def test_delete_should_not_delete_if_provider_location_not_provided(self):
         """delete_volume shouldn't delete if provider_location missed."""
@@ -625,7 +950,7 @@ class QuobyteDriverTestCase(test.TestCase):
         drv.extend_volume(volume, 3)
 
         image_utils.qemu_img_info.assert_called_once_with(volume_path,
-                                                          force_share=False,
+                                                          force_share=True,
                                                           run_as_root=False)
         image_utils.resize_image.assert_called_once_with(volume_path, 3)
 
@@ -643,15 +968,7 @@ class QuobyteDriverTestCase(test.TestCase):
         dest_vol_path = os.path.join(vol_dir, dest_volume['name'])
         info_path = os.path.join(vol_dir, src_volume['name']) + '.info'
 
-        snapshot = fake_snapshot.fake_snapshot_obj(
-            self.context,
-            volume_name=src_volume.name,
-            display_name='clone-snap-%s' % src_volume.id,
-            size=src_volume.size,
-            volume_size=src_volume.size,
-            volume_id=src_volume.id,
-            id=self.SNAP_UUID)
-        snapshot.volume = src_volume
+        snapshot = self._get_fake_snapshot(src_volume)
 
         snap_file = dest_volume['name'] + '.' + snapshot['id']
         snap_path = os.path.join(vol_dir, snap_file)
@@ -672,22 +989,204 @@ class QuobyteDriverTestCase(test.TestCase):
                                         {'active': snap_file,
                                          snapshot['id']: snap_file})
         image_utils.qemu_img_info = mock.Mock(return_value=img_info)
-        drv._set_rw_permissions_for_all = mock.Mock()
-        drv._find_share = mock.Mock()
-        drv._find_share.return_value = "/some/arbitrary/path"
+        drv._set_rw_permissions = mock.Mock()
 
         drv._copy_volume_from_snapshot(snapshot, dest_volume, size)
 
         drv._read_info_file.assert_called_once_with(info_path)
         image_utils.qemu_img_info.assert_called_once_with(snap_path,
-                                                          force_share=False,
+                                                          force_share=True,
                                                           run_as_root=False)
         (image_utils.convert_image.
          assert_called_once_with(src_vol_path,
                                  dest_vol_path,
                                  'raw',
                                  run_as_root=self._driver._execute_as_root))
-        drv._set_rw_permissions_for_all.assert_called_once_with(dest_vol_path)
+        drv._set_rw_permissions.assert_called_once_with(dest_vol_path)
+
+    @mock.patch.object(quobyte.QuobyteDriver, "_fallocate_file")
+    @mock.patch.object(os, "access", return_value=True)
+    def test_copy_volume_from_snapshot_cached(self, os_ac_mock,
+                                              qb_falloc_mock):
+        drv = self._driver
+        drv.configuration.quobyte_volume_from_snapshot_cache = True
+
+        # lots of test vars to be prepared at first
+        dest_volume = self._simple_volume(
+            id='c1073000-0000-0000-0000-0000000c1073')
+        src_volume = self._simple_volume()
+
+        vol_dir = os.path.join(self.TEST_MNT_POINT_BASE,
+                               drv._get_hash_str(self.TEST_QUOBYTE_VOLUME))
+        dest_vol_path = os.path.join(vol_dir, dest_volume['name'])
+        info_path = os.path.join(vol_dir, src_volume['name']) + '.info'
+
+        snapshot = self._get_fake_snapshot(src_volume)
+
+        snap_file = dest_volume['name'] + '.' + snapshot['id']
+        snap_path = os.path.join(vol_dir, snap_file)
+        cache_path = os.path.join(vol_dir,
+                                  drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                                  snapshot['id'])
+
+        size = dest_volume['size']
+
+        qemu_img_output = """image: %s
+        file format: raw
+        virtual size: 1.0G (1073741824 bytes)
+        disk size: 173K
+        backing file: %s
+        """ % (snap_file, src_volume['name'])
+        img_info = imageutils.QemuImgInfo(qemu_img_output)
+
+        # mocking and testing starts here
+        image_utils.convert_image = mock.Mock()
+        drv._read_info_file = mock.Mock(return_value=
+                                        {'active': snap_file,
+                                         snapshot['id']: snap_file})
+        image_utils.qemu_img_info = mock.Mock(return_value=img_info)
+        drv._set_rw_permissions = mock.Mock()
+        shutil.copyfile = mock.Mock()
+
+        drv._copy_volume_from_snapshot(snapshot, dest_volume, size)
+
+        drv._read_info_file.assert_called_once_with(info_path)
+        image_utils.qemu_img_info.assert_called_once_with(snap_path,
+                                                          force_share=True,
+                                                          run_as_root=False)
+        self.assertFalse(image_utils.convert_image.called,
+                         ("_convert_image was called but should not have been")
+                         )
+        os_ac_mock.assert_called_once_with(
+            drv._local_volume_from_snap_cache_path(snapshot), os.F_OK)
+        qb_falloc_mock.assert_called_once_with(dest_vol_path, size)
+        shutil.copyfile.assert_called_once_with(cache_path, dest_vol_path)
+        drv._set_rw_permissions.assert_called_once_with(dest_vol_path)
+
+    @mock.patch.object(os, "symlink")
+    @mock.patch.object(os, "access", return_value=False)
+    def test_copy_volume_from_snapshot_not_cached_overlay(self, os_ac_mock,
+                                                          os_sl_mock):
+        drv = self._driver
+        drv.configuration.quobyte_qcow2_volumes = True
+        drv.configuration.quobyte_volume_from_snapshot_cache = True
+        drv.configuration.quobyte_overlay_volumes = True
+
+        # lots of test vars to be prepared at first
+        dest_volume = self._simple_volume(
+            id='c1073000-0000-0000-0000-0000000c1073')
+        src_volume = self._simple_volume()
+        vol_dir = os.path.join(self.TEST_MNT_POINT_BASE,
+                               drv._get_hash_str(self.TEST_QUOBYTE_VOLUME))
+        src_vol_path = os.path.join(vol_dir, src_volume['name'])
+
+        vol_dir = os.path.join(self.TEST_MNT_POINT_BASE,
+                               drv._get_hash_str(self.TEST_QUOBYTE_VOLUME))
+        dest_vol_path = os.path.join(vol_dir, dest_volume['name'])
+        info_path = os.path.join(vol_dir, src_volume['name']) + '.info'
+
+        snapshot = self._get_fake_snapshot(src_volume)
+
+        snap_file = dest_volume['name'] + '.' + snapshot['id']
+        snap_path = os.path.join(vol_dir, snap_file)
+
+        size = dest_volume['size']
+
+        qemu_img_output = """image: %s
+        file format: raw
+        virtual size: 1.0G (1073741824 bytes)
+        disk size: 173K
+        backing file: %s
+        """ % (snap_file, src_volume['name'])
+        img_info = imageutils.QemuImgInfo(qemu_img_output)
+
+        # mocking and testing starts here
+        image_utils.convert_image = mock.Mock()
+        drv._read_info_file = mock.Mock(return_value=
+                                        {'active': snap_file,
+                                         snapshot['id']: snap_file})
+        image_utils.qemu_img_info = mock.Mock(return_value=img_info)
+        drv._set_rw_permissions = mock.Mock()
+        drv._create_overlay_volume_from_snapshot = mock.Mock()
+
+        drv._copy_volume_from_snapshot(snapshot, dest_volume, size)
+
+        drv._read_info_file.assert_called_once_with(info_path)
+        os_ac_mock.assert_called_once_with(
+            drv._local_volume_from_snap_cache_path(snapshot), os.F_OK)
+        image_utils.qemu_img_info.assert_called_once_with(snap_path,
+                                                          force_share=True,
+                                                          run_as_root=False)
+        (image_utils.convert_image.
+         assert_called_once_with(
+             src_vol_path,
+             drv._local_volume_from_snap_cache_path(snapshot), 'qcow2',
+             run_as_root=self._driver._execute_as_root))
+        os_sl_mock.assert_called_once_with(
+            src_vol_path,
+            drv._local_volume_from_snap_cache_path(snapshot) + '.parent-'
+            + snapshot.id)
+        drv._create_overlay_volume_from_snapshot.assert_called_once_with(
+            dest_volume, snapshot, size, 'qcow2')
+        drv._set_rw_permissions.assert_called_once_with(dest_vol_path)
+
+    @mock.patch.object(quobyte.QuobyteDriver, "_fallocate_file")
+    def test_copy_volume_from_snapshot_not_cached(self, qb_falloc_mock):
+        drv = self._driver
+        drv.configuration.quobyte_volume_from_snapshot_cache = True
+
+        # lots of test vars to be prepared at first
+        dest_volume = self._simple_volume(
+            id='c1073000-0000-0000-0000-0000000c1073')
+        src_volume = self._simple_volume()
+
+        vol_dir = os.path.join(self.TEST_MNT_POINT_BASE,
+                               drv._get_hash_str(self.TEST_QUOBYTE_VOLUME))
+        src_vol_path = os.path.join(vol_dir, src_volume['name'])
+        dest_vol_path = os.path.join(vol_dir, dest_volume['name'])
+        info_path = os.path.join(vol_dir, src_volume['name']) + '.info'
+
+        snapshot = self._get_fake_snapshot(src_volume)
+
+        snap_file = dest_volume['name'] + '.' + snapshot['id']
+        snap_path = os.path.join(vol_dir, snap_file)
+        cache_path = os.path.join(vol_dir,
+                                  drv.QUOBYTE_VOLUME_SNAP_CACHE_DIR_NAME,
+                                  snapshot['id'])
+
+        size = dest_volume['size']
+
+        qemu_img_output = """image: %s
+        file format: raw
+        virtual size: 1.0G (1073741824 bytes)
+        disk size: 173K
+        backing file: %s
+        """ % (snap_file, src_volume['name'])
+        img_info = imageutils.QemuImgInfo(qemu_img_output)
+
+        # mocking and testing starts here
+        image_utils.convert_image = mock.Mock()
+        drv._read_info_file = mock.Mock(return_value=
+                                        {'active': snap_file,
+                                         snapshot['id']: snap_file})
+        image_utils.qemu_img_info = mock.Mock(return_value=img_info)
+        drv._set_rw_permissions = mock.Mock()
+        shutil.copyfile = mock.Mock()
+
+        drv._copy_volume_from_snapshot(snapshot, dest_volume, size)
+
+        drv._read_info_file.assert_called_once_with(info_path)
+        image_utils.qemu_img_info.assert_called_once_with(snap_path,
+                                                          force_share=True,
+                                                          run_as_root=False)
+        (image_utils.convert_image.
+         assert_called_once_with(
+             src_vol_path,
+             drv._local_volume_from_snap_cache_path(snapshot), 'raw',
+             run_as_root=self._driver._execute_as_root))
+        qb_falloc_mock.assert_called_once_with(dest_vol_path, size)
+        shutil.copyfile.assert_called_once_with(cache_path, dest_vol_path)
+        drv._set_rw_permissions.assert_called_once_with(dest_vol_path)
 
     def test_create_volume_from_snapshot_status_not_available(self):
         """Expect an error when the snapshot's status is not 'available'."""
@@ -762,7 +1261,7 @@ class QuobyteDriverTestCase(test.TestCase):
 
         drv.get_active_image_from_info.assert_called_once_with(volume)
         image_utils.qemu_img_info.assert_called_once_with(vol_path,
-                                                          force_share=False,
+                                                          force_share=True,
                                                           run_as_root=False)
 
         self.assertEqual('raw', conn_info['data']['format'])
@@ -809,7 +1308,7 @@ class QuobyteDriverTestCase(test.TestCase):
             mock_get_active_image_from_info.assert_called_once_with(volume)
             mock_local_volume_dir.assert_called_once_with(volume)
             mock_qemu_img_info.assert_called_once_with(volume_path,
-                                                       force_share=False,
+                                                       force_share=True,
                                                        run_as_root=False)
             mock_upload_volume.assert_called_once_with(
                 mock.ANY, mock.ANY, mock.ANY, upload_path, run_as_root=False)
@@ -856,7 +1355,7 @@ class QuobyteDriverTestCase(test.TestCase):
             mock_get_active_image_from_info.assert_called_once_with(volume)
             mock_local_volume_dir.assert_called_with(volume)
             mock_qemu_img_info.assert_called_once_with(volume_path,
-                                                       force_share=False,
+                                                       force_share=True,
                                                        run_as_root=False)
             mock_convert_image.assert_called_once_with(
                 volume_path, upload_path, 'raw', run_as_root=False)
@@ -907,7 +1406,7 @@ class QuobyteDriverTestCase(test.TestCase):
             mock_get_active_image_from_info.assert_called_once_with(volume)
             mock_local_volume_dir.assert_called_with(volume)
             mock_qemu_img_info.assert_called_once_with(volume_path,
-                                                       force_share=False,
+                                                       force_share=True,
                                                        run_as_root=False)
             mock_convert_image.assert_called_once_with(
                 volume_path, upload_path, 'raw', run_as_root=False)

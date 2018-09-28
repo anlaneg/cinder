@@ -45,6 +45,7 @@ CONF.register_cli_opts(core_opts)
 
 global_opts = [
     cfg.HostAddressOpt('my_ip',
+                       sample_default='<HOST_IP_ADDRESS>',
                        default=netutils.get_my_ipv4(),
                        help='IP address of this host'),
     cfg.ListOpt('glance_api_servers',
@@ -103,6 +104,7 @@ global_opts = [
                default='cinder.scheduler.manager.SchedulerManager',
                help='Full class name for the Manager for scheduler'),
     cfg.HostAddressOpt('host',
+                       sample_default='localhost',
                        default=socket.gethostname(),
                        help='Name of this node.  This can be an opaque '
                             'identifier. It is not necessarily a host name, '
@@ -153,7 +155,8 @@ global_opts = [
                help='The full class name of the volume backup API class'),
     cfg.StrOpt('auth_strategy',
                default='keystone',
-               choices=['noauth', 'keystone'],
+               choices=[('noauth', 'Do not perform authentication'),
+                        ('keystone', 'Authenticate using keystone')],
                help='The strategy to use for auth. Supports noauth or '
                     'keystone.'),
     cfg.ListOpt('enabled_backends',
@@ -172,6 +175,9 @@ global_opts = [
     cfg.StrOpt('group_api_class',
                default='cinder.group.api.API',
                help='The full class name of the group API class'),
+    cfg.BoolOpt('split_loggers',
+                default=False,
+                help='Log requests to multiple loggers.')
 ]
 
 CONF.register_opts(core_opts)

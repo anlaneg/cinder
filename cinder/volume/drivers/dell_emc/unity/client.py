@@ -57,7 +57,8 @@ class UnityClient(object):
         return self.system.serial_number
 
     def create_lun(self, name, size, pool, description=None,
-                   io_limit_policy=None):
+                   io_limit_policy=None, is_thin=None,
+                   is_compressed=None):
         """Creates LUN on the Unity system.
 
         :param name: lun name
@@ -65,12 +66,16 @@ class UnityClient(object):
         :param pool: UnityPool object represent to pool to place the lun
         :param description: lun description
         :param io_limit_policy: io limit on the LUN
+        :param is_thin: if False, a thick LUN will be created
+        :param is_compressed: is compressed LUN enabled
         :return: UnityLun object
         """
         try:
             lun = pool.create_lun(lun_name=name, size_gb=size,
                                   description=description,
-                                  io_limit_policy=io_limit_policy)
+                                  io_limit_policy=io_limit_policy,
+                                  is_thin=is_thin,
+                                  is_compression=is_compressed)
         except storops_ex.UnityLunNameInUseError:
             LOG.debug("LUN %s already exists. Return the existing one.",
                       name)
@@ -188,6 +193,9 @@ class UnityClient(object):
 
     @coordination.synchronized('{self.host}-{name}')
     def create_host(self, name):
+        return self.create_host_wo_lock(name)
+
+    def create_host_wo_lock(self, name):
         """Provides existing host if exists else create one."""
         if name not in self.host_cache:
             try:
@@ -201,6 +209,10 @@ class UnityClient(object):
         else:
             host = self.host_cache[name]
         return host
+
+    def delete_host_wo_lock(self, host):
+        host.delete()
+        del self.host_cache[host.name]
 
     def update_host_initiators(self, host, uids):
         """Updates host with the supplied uids."""

@@ -21,7 +21,7 @@ Add private volume type access to project
 Adds private volume type access to a project.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -33,9 +33,10 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - project: project
    - project_id: project_id_path
-   - volume_type: volume_type_access
+   - volume_type: volume_type_id
+   - addProjectAccess: add_project_access
+   - project: project
 
 Request Example
 ---------------
@@ -52,7 +53,7 @@ Remove private volume type access from project
 Removes private volume type access from a project.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -64,9 +65,10 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - project: project
    - project_id: project_id_path
-   - volume_type: volume_type_access
+   - volume_type: volume_type_id
+   - removeProjectAccess: remove_project_access
+   - project: project
 
 Request Example
 ---------------
@@ -83,7 +85,7 @@ List private volume type access detail
 Lists project IDs that have access to private volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -96,7 +98,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - project_id: project_id_path
-   - volume_type: volume_type_access
+   - volume_type: volume_type_id
 
 
 Response Parameters
@@ -104,7 +106,9 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
+   - volume_type_access: volume_type_access
    - project_id: project_id
+   - volume_type_id: volume_type_id_body
 
 
 

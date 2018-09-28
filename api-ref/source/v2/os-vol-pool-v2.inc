@@ -15,7 +15,7 @@ List back-end storage pools
 Lists all back-end storage pools.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -36,7 +36,7 @@ Response Parameters
 
    - updated: updated
    - QoS_support: QoS_support
-   - name: name
+   - name: name_16
    - total_capacity: total_capacity
    - volume_backend_name: volume_backend_name
    - capabilities: capabilities

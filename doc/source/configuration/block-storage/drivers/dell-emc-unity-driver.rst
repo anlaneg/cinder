@@ -5,24 +5,25 @@ Dell EMC Unity driver
 Unity driver has been integrated in the OpenStack Block Storage project since
 the Ocata release. The driver is built on the top of Block Storage framework
 and a Dell EMC distributed Python package
-`storops <https://pypi.python.org/pypi/storops>`_.
+`storops <https://pypi.org/project/storops>`_.
 
 Prerequisites
 ~~~~~~~~~~~~~
 
-+-------------------+----------------+
-|    Software       |    Version     |
-+===================+================+
-| Unity OE          | 4.1.X or newer |
-+-------------------+----------------+
-| storops           | 0.5.7 or newer |
-+-------------------+----------------+
++-------------------+-----------------+
+|    Software       |    Version      |
++===================+=================+
+| Unity OE          | 4.1.X or newer  |
++-------------------+-----------------+
+| storops           | 0.5.10 or newer |
++-------------------+-----------------+
 
 
 Supported operations
 ~~~~~~~~~~~~~~~~~~~~
 
 - Create, delete, attach, and detach volumes.
+- Create, delete, attach, and detach compressed volumes.
 - Create, list, and delete volume snapshots.
 - Create a volume from a snapshot.
 - Copy an image to a volume.
@@ -33,6 +34,8 @@ Supported operations
 - Get volume statistics.
 - Efficient non-disruptive volume backup.
 - Revert a volume to a snapshot.
+- Create thick volumes.
+- Attach a volume to multiple servers simultaneously (multiattach).
 
 Driver configuration
 ~~~~~~~~~~~~~~~~~~~~
@@ -158,7 +161,10 @@ Driver configuration
 Driver options
 ~~~~~~~~~~~~~~
 
-.. include:: ../../tables/cinder-dell_emc_unity.inc
+.. config-table::
+   :config-target: Unity
+
+   cinder.volume.drivers.dell_emc.unity.driver
 
 FC or iSCSI ports option
 ------------------------
@@ -234,7 +240,29 @@ To enable multipath in live migration:
 Thin and thick provisioning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Only thin volume provisioning is supported in Unity volume driver.
+By default, the volume created by Unity driver is thin provisioned. Run the
+following commands to create a thick volume.
+
+.. code-block:: console
+
+    # openstack volume type create --property provisioning:type=thick \
+      --property thick_provisioning_support='<is> True' thick_volume_type
+    # openstack volume create --type thick_volume_type thick_volume
+
+
+Compressed volume support
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Unity driver supports ``compressed volume`` creation, modification and
+deletion. In order to create a compressed volume, a volume type which
+enables compression support needs to be created first:
+
+.. code-block:: console
+
+   $ openstack volume type create CompressedVolumeType
+   $ openstack volume type set --property provisioning:type=compressed --property compression_support='<is> True' CompressedVolumeType
+
+Then create volume and specify the new created volume type.
 
 
 QoS support
@@ -273,6 +301,35 @@ not efficient since a cloned volume will be created during backup.
 
 An effective approach to backups is to create a snapshot for the volume and
 connect this snapshot to the Block Storage host for volume backup.
+
+SSL support
+~~~~~~~~~~~
+
+Admin is able to enable the SSL verification for any communication against
+Unity REST API.
+
+By default, the SSL verification is disabled, user can enable it by following
+steps:
+
+#. Setup the Unity array certificate and import it to the Unity, see section
+   `Storage system certificate` of `Security Configuration Guide <https://www.emc.com/collateral/TechnicalDocument/docu69321.pdf>`_.
+
+#. Import the CA certficate to the Cinder nodes on which the driver is running.
+
+#. Enable the changes on cinder nodes and restart the cinder services.
+
+.. code-block:: ini
+
+     [unity]
+     ...
+     driver_ssl_cert_verify = True
+     driver_ssl_cert_path = <path to the CA>
+     ...
+
+
+If `driver_ssl_cert_path` is omitted, the system default CA will be used for CA
+verification.
+
 
 IPv6 support
 ~~~~~~~~~~~~

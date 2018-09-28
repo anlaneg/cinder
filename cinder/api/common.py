@@ -68,22 +68,6 @@ ATTRIBUTE_CONVERTERS = {'name~': 'display_name~',
 METADATA_TYPES = enum.Enum('METADATA_TYPES', 'user image')
 
 
-# Regex that matches alphanumeric characters, periods, hyphens,
-# colons and underscores:
-# ^ assert position at start of the string
-# [\w\.\-\:\_] match expression
-# $ assert position at end of the string
-VALID_KEY_NAME_REGEX = re.compile(r"^[\w\.\-\:\_]+$", re.UNICODE)
-
-
-def validate_key_names(key_names_list):
-    """Validate each item of the list to match key name regex."""
-    for key_name in key_names_list:
-        if not VALID_KEY_NAME_REGEX.match(key_name):
-            return False
-    return True
-
-
 def get_pagination_params(params, max_limit=None):
     """Return marker, limit, offset tuple from request.
 
@@ -421,6 +405,20 @@ def convert_filter_attributes(filters, resource):
 
 def reject_invalid_filters(context, filters, resource,
                            enable_like_filter=False):
+    invalid_filters = []
+    for key in filters.copy().keys():
+        try:
+            # Only ASCII characters can be valid filter keys,
+            # in PY2/3, the key can be either unicode or string.
+            if isinstance(key, str):
+                key.encode('ascii')
+            else:
+                key.decode('ascii')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            raise webob.exc.HTTPBadRequest(
+                explanation=_('Filter keys can only contain '
+                              'ASCII characters.'))
+
     if context.is_admin and resource not in ['pool']:
         # Allow all options except resource is pool
         # pool API is only available for admin
@@ -431,7 +429,6 @@ def reject_invalid_filters(context, filters, resource,
         configured_filters = configured_filters[resource]
     else:
         configured_filters = []
-    invalid_filters = []
     for key in filters.copy().keys():
         if not enable_like_filter:
             if key not in configured_filters:

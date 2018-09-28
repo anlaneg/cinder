@@ -65,7 +65,7 @@ volumes_policies = [
     policy.DocumentedRuleDefault(
         name=GET_ALL_POLICY,
         check_str=base.RULE_ADMIN_OR_OWNER,
-        description="List volumes.",
+        description="List volumes or get summary of volumes.",
         operations=[
             {
                 'method': 'GET',
@@ -74,16 +74,26 @@ volumes_policies = [
             {
                 'method': 'GET',
                 'path': '/volumes/detail'
+            },
+            {
+                'method': 'GET',
+                'path': '/volumes/summary'
             }
         ]),
     policy.DocumentedRuleDefault(
         name=UPDATE_POLICY,
         check_str=base.RULE_ADMIN_OR_OWNER,
-        description="Update volume.",
+        description="Update volume or update a volume's bootable status.",
         operations=[
             {
                 'method': 'PUT',
                 'path': '/volumes'
+            },
+            # The API below calls the volume update API internally, which in
+            # turn enforces the update policy.
+            {
+                'method': 'POST',
+                'path': '/volumes/{volume_id}/action (os-set_bootable)'
             }
         ]),
     policy.DocumentedRuleDefault(

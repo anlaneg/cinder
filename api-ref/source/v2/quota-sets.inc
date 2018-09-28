@@ -15,7 +15,7 @@ Show quotas
 Shows quotas for a project.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -69,7 +69,7 @@ Update quotas
 Updates quotas for a project.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -98,6 +98,8 @@ Request
    - security_groups: security_groups
    - project_id: quotas_project_id
    - admin_project_id: admin_project_id
+   - backup_gigabytes: backup_gigabytes
+   - per_volume_gigabytes: per_volume_gigabytes
 
 Request Example
 ---------------
@@ -142,7 +144,7 @@ Delete quotas
 Deletes quotas for a project so the quotas revert to default values.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -172,7 +174,7 @@ Gets default quotas for a project.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

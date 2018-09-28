@@ -15,6 +15,7 @@
 #    under the License.
 
 import datetime
+import re
 import six
 
 import ddt
@@ -26,6 +27,8 @@ from cinder import context
 from cinder import exception
 from cinder.objects import fields
 from cinder import test
+from cinder.tests.unit import fake_group_snapshot
+from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit.image import fake as fake_image
 from cinder.tests.unit import utils as test_utils
 from cinder.volume import configuration as conf
@@ -1796,8 +1799,8 @@ class SolidFireVolumeTestCase(test.TestCase):
         source = {'group_snapshot_id': 'typical_cgsnap_id',
                   'volume_id': 'typical_vol_id',
                   'id': 'no_id_4_u'}
-        name = (self.configuration.sf_volume_prefix
-                + source.get('group_snapshot_id'))
+        name = (self.configuration.sf_volume_prefix +
+                source.get('group_snapshot_id'))
         with mock.patch.object(sfv,
                                '_get_group_snapshot_by_name',
                                return_value={}) as get,\
@@ -1817,6 +1820,36 @@ class SolidFireVolumeTestCase(test.TestCase):
         self.assertEqual(result,
                          {'status': fields.GroupStatus.AVAILABLE})
         group_cg_test.assert_called_once_with(group)
+
+    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    def test_delete_group_snap_cg(self, group_cg_test):
+        sfv = solidfire.SolidFireDriver(configuration=self.configuration)
+        group_cg_test.return_value = True
+        cgsnapshot = fake_group_snapshot.fake_group_snapshot_obj(
+            mock.MagicMock())
+        snapshots = fake_snapshot.fake_snapshot_obj(mock.MagicMock())
+
+        with mock.patch.object(sfv, '_delete_cgsnapshot',
+                               return_value={}) as _del_mock:
+            model_update = sfv.delete_group_snapshot(self.ctxt,
+                                                     cgsnapshot, snapshots)
+            _del_mock.assert_called_once_with(self.ctxt, cgsnapshot, snapshots)
+            self.assertEqual({}, model_update)
+
+    @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
+    def test_delete_group_snap(self, group_cg_test):
+        sfv = solidfire.SolidFireDriver(configuration=self.configuration)
+        group_cg_test.return_value = False
+        cgsnapshot = fake_group_snapshot.fake_group_snapshot_obj(
+            mock.MagicMock())
+        snapshots = fake_snapshot.fake_snapshot_obj(mock.MagicMock())
+
+        with mock.patch.object(sfv, '_delete_cgsnapshot',
+                               return_value={}) as _del_mock:
+
+            self.assertRaises(NotImplementedError, sfv.delete_group_snapshot,
+                              self.ctxt, cgsnapshot, snapshots)
+            _del_mock.assert_not_called()
 
     @mock.patch('cinder.volume.utils.is_group_a_cg_snapshot_type')
     def test_create_group_rainy(self, group_cg_test):
@@ -2049,3 +2082,9 @@ class SolidFireVolumeTestCase(test.TestCase):
                        'port': 443}
         ep = sfv._build_endpoint_info(mvip='1.2.3.4', password='nunyabiz')
         self.assertEqual(expected_ep, ep)
+
+    def test_generate_random_string(self):
+        sfv = solidfire.SolidFireDriver(configuration=self.configuration)
+        a = sfv._generate_random_string(12)
+        self.assertEqual(len(a), 12)
+        self.assertIsNotNone(re.match(r'[A-Z0-9]{12}', a), a)

@@ -32,6 +32,7 @@ from cinder.volume import configuration
 from cinder.volume import driver
 from cinder.volume.drivers.san import san
 from cinder.volume.drivers.zfssa import zfssarest
+from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
 
 import taskflow.engines
@@ -121,8 +122,10 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             Volume manage/unmanage support.
         1.0.3:
             Fix multi-connect to enable live-migration (LP#1565051).
+        1.0.4:
+            Implement get_manageable_volumes().
     """
-    VERSION = '1.0.3'
+    VERSION = '1.0.4'
     protocol = 'iSCSI'
 
     # ThirdPartySystems wiki page
@@ -375,11 +378,17 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         """Deletes a snapshot."""
         LOG.debug('zfssa.delete_snapshot: snapshot=%s', snapshot['name'])
         lcfg = self.configuration
-        numclones = self.zfssa.num_clones(lcfg.zfssa_pool,
-                                          lcfg.zfssa_project,
-                                          snapshot['volume_name'],
-                                          snapshot['name'])
-        if numclones > 0:
+        try:
+            snap2del = self.zfssa.get_lun_snapshot(lcfg.zfssa_pool,
+                                                   lcfg.zfssa_project,
+                                                   snapshot['volume_name'],
+                                                   snapshot['name'])
+        except exception.SnapshotNotFound:
+            # If snapshot creation failed, it may exist in the database
+            # but not on the ZFSSA. Exit silently in this case.
+            return
+
+        if snap2del['numclones'] > 0:
             LOG.error('Snapshot %s: has clones', snapshot['name'])
             raise exception.SnapshotIsBusy(snapshot_name=snapshot['name'])
 
@@ -783,8 +792,6 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
 
         (target_portal, target_iqn) = provider['provider_location'].split()
         iscsi_properties['target_discovered'] = False
-        iscsi_properties['target_portal'] = target_portal
-        iscsi_properties['target_iqn'] = target_iqn
 
         # Get LUN again to discover new initiator group mapping
         lun = self.zfssa.get_lun(lcfg.zfssa_pool, project, volume['name'])
@@ -796,7 +803,22 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         # presented to all of them, the same LU number is assigned to all of
         # them, so we can use the first initator group containing the
         # initiator to lookup the right LU number in our mapping
-        iscsi_properties['target_lun'] = int(lu_map[init_groups[0]])
+        target_lun = int(lu_map[init_groups[0]])
+
+        # Including both singletons and lists below allows basic operation when
+        # the connector is using multipath, although only one path will be
+        # provided. This is necessary to handle the case where the ZFSSA
+        # cluster node has failed, and the other node has taken over the pool.
+        # In that case, the network interface of the remaining node responds to
+        # an iSCSI sendtargets discovery with BOTH targets, which os-brick
+        # interprets as both targets providing paths to the desired LUN, which
+        # can cause one instance to attempt to access another instance's LUN.
+        iscsi_properties['target_portal'] = target_portal
+        iscsi_properties['target_portals'] = [target_portal]
+        iscsi_properties['target_iqn'] = target_iqn
+        iscsi_properties['target_iqns'] = [target_iqn]
+        iscsi_properties['target_lun'] = target_lun
+        iscsi_properties['target_luns'] = [target_lun]
 
         iscsi_properties['volume_id'] = volume['id']
 
@@ -1035,10 +1057,11 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
         if (cache['snapshot'].startswith('image-') and
                 cache['share'].startswith('os-cache-vol')):
             try:
-                numclones = self.zfssa.num_clones(lcfg.zfssa_pool,
-                                                  lcfg.zfssa_cache_project,
-                                                  cache['share'],
-                                                  cache['snapshot'])
+                snap = self.zfssa.get_lun_snapshot(lcfg.zfssa_pool,
+                                                   lcfg.zfssa_cache_project,
+                                                   cache['share'],
+                                                   cache['snapshot'])
+                numclones = snap['numclones']
             except Exception:
                 LOG.debug('Cache volume is already deleted.')
                 return
@@ -1067,6 +1090,41 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
             except exception.VolumeBackendAPIException:
                 LOG.warning("Volume %s exists but can't be deleted.",
                             cache['share'])
+
+    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
+                               sort_keys, sort_dirs):
+        lcfg = self.configuration
+        manageable_volumes = []
+        managed_vols = [vol['id'] for vol in cinder_volumes]
+
+        for lun in self.zfssa.get_all_luns(lcfg.zfssa_pool,
+                                           lcfg.zfssa_project):
+            lun_info = {
+                'reference': {'source-name': lun['name']},
+                'size': int(math.ceil(float(lun['size']) / units.Gi)),
+                'cinder_id': None,
+                'extra_info': None,
+                'safe_to_manage': True,
+                'reason_not_safe': None,
+            }
+            if ('cinder_managed' not in lun and
+                    lcfg.zfssa_manage_policy != 'loose'):
+                lun_info['safe_to_manage'] = False
+                lun_info['reason_not_safe'] = 'cinder_managed schema ' \
+                                              'not present'
+            elif lun.get('cinder_managed', False):
+                lun_info['safe_to_manage'] = False
+                vol_id = volume_utils.extract_id_from_volume_name(lun['name'])
+                if vol_id in managed_vols:
+                    lun_info['reason_not_safe'] = 'already managed'
+                    lun_info['cinder_id'] = vol_id
+                else:
+                    lun_info['reason_not_safe'] = \
+                        'managed by another cinder instance?'
+            manageable_volumes.append(lun_info)
+
+        return volume_utils.paginate_entries_list(
+            manageable_volumes, marker, limit, offset, sort_keys, sort_dirs)
 
     def manage_existing(self, volume, existing_ref):
         """Manage an existing volume in the ZFSSA backend.
@@ -1159,10 +1217,11 @@ class ZFSSAISCSIDriver(driver.ISCSIDriver):
                                               lcfg.zfssa_project,
                                               existing_ref['source-name'])
         except exception.VolumeNotFound:
-            err_msg = (_("Volume %s doesn't exist on the ZFSSA "
-                         "backend.") % existing_vol['name'])
+            err_msg = (_("No LUN with name %s exists on the ZFSSA "
+                         "backend.") % existing_ref['source-name'])
             LOG.error(err_msg)
-            raise exception.InvalidInput(reason=err_msg)
+            raise exception.ManageExistingInvalidReference(
+                existing_ref=existing_ref, reason=err_msg)
         return existing_vol
 
 

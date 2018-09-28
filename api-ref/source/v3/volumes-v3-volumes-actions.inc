@@ -53,7 +53,7 @@ Troubleshooting
   end.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -86,7 +86,7 @@ Administrator only. Resets the status, attach status, revert to snapshot,
 and migration status for a volume. Specify the ``os-reset_status`` action in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -123,7 +123,7 @@ and the volume status must be ``available``.
 Available since API microversion ``3.40``.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -161,7 +161,7 @@ Set image metadata for a volume
 Sets the image metadata for a volume. Specify the ``os-set_image_metadata`` action in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -176,7 +176,7 @@ Request
    - project_id: project_id_path
    - volume_id: volume_id_path
    - os-set_image_metadata: os-set_image_metadata
-   - metadata: metadata
+   - metadata: metadata_5
 
 Request Example
 ---------------
@@ -193,7 +193,7 @@ Remove image metadata from a volume
 Removes image metadata, by key, from a volume. Specify the ``os-unset_image_metadata`` action in the request body and the ``key`` for the metadata key and value pair that you want to remove.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -227,7 +227,7 @@ Show image metadata for a volume
 Shows image metadata for a volume.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -254,7 +254,7 @@ Response Parameters
 
 .. rest_parameters:: parameters.yaml
 
-   - metadata: metadata_8
+   - metadata: metadata_5
 
 Response Example
 ----------------
@@ -278,7 +278,7 @@ Preconditions
 - You should set ``instance_uuid`` or ``host_name``.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -317,7 +317,7 @@ Preconditions
 - Volume status must be ``in-use``.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -355,7 +355,7 @@ Preconditions
 - Volume status must be ``available``.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -394,7 +394,7 @@ through the ``volume_extension:volume_admin_actions:force_detach`` rule in
 the ``policy.json`` file.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -439,7 +439,7 @@ the volume to perform this operation. Cloud providers can change these
 permissions through the policy.json file.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -464,6 +464,73 @@ Request Example
    :language: javascript
 
 
+Migrate a volume
+~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Specify the ``os-migrate_volume`` action in the request body.
+
+Migrates a volume to the specified host. Starting with the
+`3.16 microversion`_ a cluster can be specified instead of a host.
+
+It is generally not recommended to migrate an *in-use* multiattach volume if
+that volume has more than one active read/write attachment.
+
+Policy defaults enable only users with the administrative role to perform this
+operation. Cloud providers can change these permissions through the
+policy.json file.
+
+.. _3.16 microversion: https://docs.openstack.org/cinder/latest/contributor/api_microversion_history.html#id15
+
+**Preconditions**
+
+* The volume ``status`` must be ``available`` or ``in-use``.
+* The volume ``migration_status`` must be ``None``, ``deleting``, ``error``,
+  or ``success``.
+* The volume ``replication_status`` must be ``None``, ``disabled`` or
+  ``not-capable``.
+* The migration must happen to another host (or cluster) from which the
+  volume currently resides.
+* The volume must not be a member of a group.
+* The volume must not have snapshots.
+
+**Asynchronous Postconditions**
+
+On success, the volume ``status`` will return to its original status of
+``available`` or ``in-use`` and the ``migration_status`` will be ``success``.
+On failure, the ``migration_status`` will be ``error``. In the case of failure,
+if ``lock_volume`` was true and the volume was originally ``available`` when
+it was migrated, the ``status`` will go back to ``available``.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - volume_id: volume_id_path
+   - project_id: project_id_path
+   - os-migrate_volume: os-migrate_volume
+   - host: migrate_host
+   - force_host_copy: migrate_force_host_copy
+   - lock_volume: migrate_lock_volume
+   - cluster: migrate_cluster
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-os-migrate_volume-request.json
+   :language: javascript
+
+
 Force delete a volume
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -473,7 +540,7 @@ Attempts force-delete of volume, regardless of state. Specify the ``os-force_del
 in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -505,7 +572,7 @@ Update the bootable status for a volume, mark it as a bootable volume. Specify
 the ``os-set_bootable`` action in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -537,7 +604,7 @@ Upload volume to image
 Uploads the specified volume to image service.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -589,4 +656,242 @@ Response Example
 ----------------
 
 .. literalinclude:: ./samples/volume-upload-to-image-response.json
+   :language: javascript
+
+
+Reserve volume
+~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Mark volume as reserved. Specify the ``os-reserve`` action in the
+request body.
+
+Preconditions
+
+- Volume status must be ``available``.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-reserve: os-reserve
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-reserve-request.json
+   :language: javascript
+
+
+Unmark volume as reserved.
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Unmark volume as reserved. Specify the ``os-unreserve`` action in
+the request body.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-unreserve: os-unreserve
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-unreserve-request.json
+   :language: javascript
+
+
+Update volume status to detaching
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Update volume status to 'detaching'.. Specify the ``os-begin_detaching`` action
+in the request body.
+
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-begin_detaching: os-begin_detaching
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-begin-detaching-request.json
+   :language: javascript
+
+
+
+Roll back volume status to in-use
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Roll back volume status to 'in-use'. Specify the ``os-roll_detaching`` action
+in the request body.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-roll_detaching: os-roll_detaching
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-roll-detaching-request.json
+   :language: javascript
+
+
+Terminate volume attachment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Terminate volume attachment. Specify the ``os-terminate_connection``
+action in the request body.
+
+Preconditions
+
+- Volume status must be ``in-use``.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-terminate_connection: os-terminate_connection
+   - connector: connector
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-terminate-connection-request.json
+   :language: javascript
+
+
+
+Initialize volume attachment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Initialize volume attachment. Specify the ``os-initialize_connection``
+action in the request body.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-initialize_connection: os-initialize_connection
+   - connector: connector
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-initialize-connection-request.json
+   :language: javascript
+
+
+Updates volume read-only access-mode flag
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. rest_method::  POST /v3/{project_id}/volumes/{volume_id}/action
+
+Enables or disables update of volume to read-only access mode.
+Specify the ``os-update_readonly_flag`` action in the request body.
+
+Response codes
+--------------
+
+.. rest_status_code:: success ../status.yaml
+
+   - 202
+
+
+Request
+-------
+
+.. rest_parameters:: parameters.yaml
+
+   - project_id: project_id_path
+   - volume_id: volume_id_path
+   - os-update_readonly_flag: os-update_readonly_flag
+   - readonly: readonly
+
+Request Example
+---------------
+
+.. literalinclude:: ./samples/volume-readonly-update-request.json
    :language: javascript

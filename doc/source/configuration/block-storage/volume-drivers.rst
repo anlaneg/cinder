@@ -31,17 +31,18 @@ Driver Configuration Reference
    drivers/lvm-volume-driver
    drivers/nfs-volume-driver
    drivers/sheepdog-driver
-   drivers/coprhd-driver
    drivers/datacore-volume-driver
    drivers/datera-volume-driver
    drivers/dell-equallogic-driver
-   drivers/dell-emc-scaleio-driver
    drivers/dell-storagecenter-driver
    drivers/dell-emc-unity-driver
    drivers/dell-emc-vnx-driver
-   drivers/emc-vmax-driver
+   drivers/dell-emc-vmax-driver
+   drivers/dell-emc-vxflex-driver
    drivers/emc-xtremio-driver
+   drivers/drbd-driver
    drivers/fujitsu-eternus-dx-driver
+   drivers/hgst-driver
    drivers/hpe-3par-driver
    drivers/hpe-lefthand-driver
    drivers/hp-msa-driver
@@ -51,12 +52,14 @@ Driver Configuration Reference
    drivers/ibm-storage-volume-driver
    drivers/ibm-storwize-svc-driver
    drivers/infinidat-volume-driver
+   drivers/inspur-instorage-driver
    drivers/itri-disco-driver
    drivers/kaminario-driver
    drivers/lenovo-driver
    drivers/nec-storage-m-series-driver
    drivers/netapp-volume-driver
    drivers/nimble-volume-driver
+   drivers/nexentaedge-driver
    drivers/nexentastor4-driver
    drivers/nexentastor5-driver
    drivers/prophetstor-dpl-driver
@@ -66,6 +69,7 @@ Driver Configuration Reference
    drivers/storpool-volume-driver
    drivers/synology-dsm-driver
    drivers/tintri-volume-driver
+   drivers/veritas-access-iscsi-driver
    drivers/vzstorage-driver
    drivers/vmware-vmdk-driver
    drivers/windows-iscsi-volume-driver

@@ -26,6 +26,7 @@ from eventlet import semaphore
 
 from lxml import etree
 from oslo_log import log as logging
+from oslo_utils import netutils
 import random
 import six
 from six.moves import urllib
@@ -34,6 +35,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import ssh_utils
 from cinder import utils
+from cinder.volume.drivers.netapp import utils as na_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ class NaServer(object):
     def __init__(self, host, server_type=SERVER_TYPE_FILER,
                  transport_type=TRANSPORT_TYPE_HTTP,
                  style=STYLE_LOGIN_PASSWORD, username=None,
-                 password=None, port=None):
+                 password=None, port=None, api_trace_pattern=None):
         self._host = host
         self.set_server_type(server_type)
         self.set_transport_type(transport_type)
@@ -77,6 +79,9 @@ class NaServer(object):
         self._username = username
         self._password = password
         self._refresh_conn = True
+
+        if api_trace_pattern is not None:
+            na_utils.setup_api_trace_pattern(api_trace_pattern)
 
         LOG.debug('Using NetApp controller: %s', self._host)
 
@@ -171,7 +176,7 @@ class NaServer(object):
         """Set the vserver to use if tunneling gets enabled."""
         self._vserver = vserver
 
-    @utils.trace_api
+    @utils.trace_api(filter_function=na_utils.trace_filter_func_api)
     def send_http_request(self, na_element, enable_tunneling=False):
         """Invoke the API on the server."""
         if not na_element or not isinstance(na_element, NaElement):
@@ -220,6 +225,13 @@ class NaServer(object):
                 or result.get_child_content('reason')\
                 or 'Execution status is failed due to unknown reason'
         raise NaApiError(code, msg)
+
+    def send_request(self, api_name, api_args=None, enable_tunneling=True):
+        """Sends request to Ontapi."""
+        request = NaElement(api_name)
+        if api_args:
+            request.translate_struct(api_args)
+        return self.invoke_successfully(request, enable_tunneling)
 
     def _create_request(self, na_element, enable_tunneling=False):
         """Creates request in the desired format."""
@@ -270,7 +282,12 @@ class NaServer(object):
         return processed_response.get_child_by_name('results')
 
     def _get_url(self):
-        return '%s://%s:%s/%s' % (self._protocol, self._host, self._port,
+        host = self._host
+
+        if netutils.is_valid_ipv6(host):
+            host = netutils.escape_ipv6(host)
+
+        return '%s://%s:%s/%s' % (self._protocol, host, self._port,
                                   self._url)
 
     def _build_opener(self):
@@ -331,7 +348,7 @@ class NaElement(object):
         if isinstance(na_element, NaElement):
             self._element.append(na_element._element)
             return
-        raise
+        raise Exception(_('Failed to add child element.'))
 
     def get_child_by_name(self, name):
         """Get the child element by the tag name."""

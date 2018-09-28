@@ -63,10 +63,11 @@ class SCISCSIDriver(storagecenter_common.SCCommonDriver,
         3.7.0 - Support for Data Reduction, Group QOS and Volume QOS.
         4.0.0 - Driver moved to dell_emc.
         4.1.0 - Timeouts added to rest calls.
+        4.1.1 - excluded_domain_ips support.
 
     """
 
-    VERSION = '4.1.0'
+    VERSION = '4.1.1'
     CI_WIKI_NAME = "Dell_EMC_SC_Series_CI"
 
     def __init__(self, *args, **kwargs):
@@ -95,7 +96,7 @@ class SCISCSIDriver(storagecenter_common.SCCommonDriver,
         islivevol = self._is_live_vol(volume)
         initiator_name = connector.get('initiator')
         multipath = connector.get('multipath', False)
-        LOG.info('initialize_ connection: %(vol)s:%(pid)s:'
+        LOG.info('initialize_connection: %(vol)s:%(pid)s:'
                  '%(intr)s. Multipath is %(mp)r',
                  {'vol': volume_name,
                   'pid': provider_id,
@@ -141,7 +142,8 @@ class SCISCSIDriver(storagecenter_common.SCCommonDriver,
                             # 3. OS brick is calling us in single path mode so
                             #    we want to return Target_Portal and
                             #    Target_Portals as alternates.
-                            iscsiprops = api.find_iscsi_properties(scvolume)
+                            iscsiprops = api.find_iscsi_properties(scvolume,
+                                                                   scserver)
 
                             # If this is a live volume we need to map up our
                             # secondary volume. Note that if we have failed
@@ -204,7 +206,8 @@ class SCISCSIDriver(storagecenter_common.SCCommonDriver,
                 secondaryvol = api.get_volume(
                     sclivevolume['secondaryVolume']['instanceId'])
                 if secondaryvol:
-                    return api.find_iscsi_properties(secondaryvol)
+                    return api.find_iscsi_properties(secondaryvol,
+                                                     secondary)
         # Dummy return on failure.
         data = {'target_discovered': False,
                 'target_iqn': None,

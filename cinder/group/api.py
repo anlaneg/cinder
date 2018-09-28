@@ -291,7 +291,6 @@ class API(base.Base):
                                  "Do not need to create again.",
                                  {'grp': group.id,
                                   'vol_type': volume_type_id})
-                        pass
 
                 # Since group snapshot is passed in, the following call will
                 # create a db entry for the volume, but will not call the
@@ -374,7 +373,6 @@ class API(base.Base):
                                  "Do not need to create again.",
                                  {'grp': group.id,
                                   'vol_type': volume_type_id})
-                        pass
 
                 # Since source_group is passed in, the following call will
                 # create a db entry for the volume, but will not call the
@@ -455,6 +453,7 @@ class API(base.Base):
                     'display_name': request_spec.get('name'),
                     'volume_type_id': volume_type_id,
                     'group_type_id': group.group_type_id,
+                    'availability_zone': group.availability_zone
                 }
 
                 request_spec['volume_properties'] = volume_properties
@@ -827,11 +826,6 @@ class API(base.Base):
     def reset_status(self, context, group, status):
         """Reset status of generic group"""
         context.authorize(gp_action_policy.RESET_STATUS, target_obj=group)
-        if status not in c_fields.GroupStatus.ALL:
-            msg = _("Group status: %(status)s is invalid, valid status "
-                    "are: %(valid)s.") % {'status': status,
-                                          'valid': c_fields.GroupStatus.ALL}
-            raise exception.InvalidGroupStatus(reason=msg)
         field = {'updated_at': timeutils.utcnow(),
                  'status': status}
         group.update(field)
@@ -877,7 +871,8 @@ class API(base.Base):
         return group_snapshot
 
     def delete_group_snapshot(self, context, group_snapshot, force=False):
-        context.authorize(gsnap_policy.DELETE_POLICY)
+        context.authorize(gsnap_policy.DELETE_POLICY,
+                          target_obj=group_snapshot)
         group_snapshot.assert_not_frozen()
         values = {'status': 'deleting'}
         expected = {'status': ('available', 'error')}
@@ -904,15 +899,18 @@ class API(base.Base):
                                                  group_snapshot)
 
     def update_group_snapshot(self, context, group_snapshot, fields):
-        context.authorize(gsnap_policy.UPDATE_POLICY)
+        context.authorize(gsnap_policy.UPDATE_POLICY,
+                          target_obj=group_snapshot)
         group_snapshot.update(fields)
         group_snapshot.save()
 
     def get_group_snapshot(self, context, group_snapshot_id):
-        context.authorize(gsnap_policy.GET_POLICY)
-        group_snapshots = objects.GroupSnapshot.get_by_id(context,
-                                                          group_snapshot_id)
-        return group_snapshots
+        group_snapshot = objects.GroupSnapshot.get_by_id(context,
+                                                         group_snapshot_id)
+        context.authorize(gsnap_policy.GET_POLICY,
+                          target_obj=group_snapshot)
+
+        return group_snapshot
 
     def get_all_group_snapshots(self, context, filters=None, marker=None,
                                 limit=None, offset=None, sort_keys=None,
@@ -936,7 +934,8 @@ class API(base.Base):
     def reset_group_snapshot_status(self, context, gsnapshot, status):
         """Reset status of group snapshot"""
 
-        context.authorize(gsnap_action_policy.RESET_STATUS)
+        context.authorize(gsnap_action_policy.RESET_STATUS,
+                          target_obj=gsnapshot)
         field = {'updated_at': timeutils.utcnow(),
                  'status': status}
         gsnapshot.update(field)

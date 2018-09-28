@@ -67,7 +67,16 @@ common_opts = [
     cfg.MultiOpt('excluded_domain_ip',
                  item_type=types.IPAddress(),
                  default=None,
-                 help='Domain IP to be excluded from iSCSI returns.'),
+                 deprecated_for_removal=True,
+                 deprecated_reason="Replaced by excluded_domain_ips option",
+                 deprecated_since="Stein",
+                 help='DEPRECATED: Fault Domain IP to be excluded from '
+                      'iSCSI returns.'),
+    cfg.ListOpt('excluded_domain_ips',
+                item_type=types.IPAddress(),
+                default=[],
+                help='Comma separated Fault Domain IPs to be excluded '
+                     'from iSCSI returns.'),
     cfg.StrOpt('dell_server_os',
                default='Red Hat Linux 6.x',
                help='Server OS type to use when creating a new server on the '
@@ -719,6 +728,7 @@ class SCCommonDriver(driver.ManageableVD,
             data['thin_provisioning_support'] = True
             data['QoS_support'] = False
             data['replication_enabled'] = self.replication_enabled
+            data['multiattach'] = True
             if self.replication_enabled:
                 data['replication_type'] = ['async', 'sync']
                 data['replication_count'] = len(self.backends)
@@ -982,11 +992,13 @@ class SCCommonDriver(driver.ManageableVD,
             for volume, src_vol in zip(volumes, source_vols):
                 update = self.create_cloned_volume(volume, src_vol)
                 update['status'] = fields.GroupStatus.AVAILABLE
+                update['id'] = volume['id']
                 volumes_model_update.append(update.copy())
         else:
             for volume, src_snap in zip(volumes, snapshots):
                 update = self.create_volume_from_snapshot(volume, src_snap)
                 update['status'] = fields.GroupStatus.AVAILABLE
+                update['id'] = volume['id']
                 volumes_model_update.append(update.copy())
 
         # So, in theory, everything has been created. Now is the time to

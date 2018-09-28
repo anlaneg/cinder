@@ -131,16 +131,12 @@ class TestZFSSAISCSIDriver(test.TestCase):
         'size': test_vol['size']
     }
 
-    def __init__(self, method):
-        super(TestZFSSAISCSIDriver, self).__init__(method)
-
-    @mock.patch.object(iscsi, 'factory_zfssa')
-    def setUp(self, _factory_zfssa):
+    def setUp(self):
         super(TestZFSSAISCSIDriver, self).setUp()
         self._create_fake_config()
+        self.mock_object(iscsi, 'factory_zfssa', spec=rest.ZFSSAApi)
         self.mock_object(volume_utils, 'get_max_over_subscription_ratio',
                          return_value=1.0)
-        _factory_zfssa.return_value = mock.MagicMock(spec=rest.ZFSSAApi)
         iscsi.ZFSSAISCSIDriver._execute = fake_utils.fake_execute
         self.drv = iscsi.ZFSSAISCSIDriver(configuration=self.configuration)
         self.drv.do_setup({})
@@ -441,7 +437,10 @@ class TestZFSSAISCSIDriver(test.TestCase):
             }
         }
         cache = lun2del['origin']
-        self.drv.zfssa.num_clones.return_value = 0
+        self.drv.zfssa.get_lun_snapshot.return_value = {
+            'name': self.test_snap['name'],
+            'numclones': 0
+        }
         self.drv._check_origin(lun2del, 'volname')
         self.drv.zfssa.delete_lun.assert_called_once_with(
             lcfg.zfssa_pool,
@@ -449,7 +448,10 @@ class TestZFSSAISCSIDriver(test.TestCase):
             cache['share'])
 
     def test_create_delete_snapshot(self):
-        self.drv.zfssa.num_clones.return_value = 0
+        self.drv.zfssa.get_lun_snapshot.return_value = {
+            'name': self.test_snap['name'],
+            'numclones': 0
+        }
         lcfg = self.configuration
         self.drv.create_snapshot(self.test_snap)
         self.drv.zfssa.create_snapshot.assert_called_once_with(
@@ -463,6 +465,19 @@ class TestZFSSAISCSIDriver(test.TestCase):
             lcfg.zfssa_project,
             self.test_snap['volume_name'],
             self.test_snap['name'])
+
+    def test_delete_nonexistent_snapshot(self):
+        self.drv.zfssa.get_lun_snapshot.side_effect = \
+            exception.SnapshotNotFound(snapshot_id=self.test_snap['name'])
+        self.drv.delete_snapshot(self.test_snap)
+        self.drv.zfssa.delete_snapshot.assert_not_called()
+
+    def test_delete_snapshot_backend_fail(self):
+        self.drv.zfssa.get_lun_snapshot.side_effect = \
+            exception.VolumeBackendAPIException(data='fakemsg')
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.drv.delete_snapshot,
+                          self.test_snap)
 
     def test_create_volume_from_snapshot(self):
         lcfg = self.configuration
@@ -547,6 +562,60 @@ class TestZFSSAISCSIDriver(test.TestCase):
                          props['data']['target_portal'])
         self.assertEqual(test_target_iqn, props['data']['target_iqn'])
         self.assertEqual(int(lu_number), props['data']['target_lun'])
+        self.assertFalse(props['data']['target_discovered'])
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [initiator_group])
+
+        self.drv.terminate_connection(self.test_vol, connector)
+        self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
+            lcfg.zfssa_pool,
+            lcfg.zfssa_project,
+            self.test_vol['name'],
+            [])
+
+    @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_provider_info')
+    def test_volume_attach_detach_multipath(self, _get_provider_info):
+        lcfg = self.configuration
+        test_target_iqn = 'iqn.1986-03.com.sun:02:00000-aaaa-bbbb-cccc-ddddd'
+        self.drv._get_provider_info.return_value = {
+            'provider_location': '%s %s' % (lcfg.zfssa_target_portal,
+                                            test_target_iqn)
+        }
+
+        def side_effect_get_initiator_initiatorgroup(arg):
+            return [{
+                'iqn.1-0.org.deb:01:d7': 'test-init-grp1',
+                'iqn.1-0.org.deb:01:d9': 'test-init-grp2',
+            }[arg]]
+
+        self.drv.zfssa.get_initiator_initiatorgroup.side_effect = (
+            side_effect_get_initiator_initiatorgroup)
+
+        initiator = 'iqn.1-0.org.deb:01:d7'
+        initiator_group = 'test-init-grp1'
+        lu_number = '246'
+
+        self.drv.zfssa.get_lun.side_effect = iter([
+            {'initiatorgroup': [], 'number': []},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+            {'initiatorgroup': [initiator_group], 'number': [lu_number]},
+        ])
+
+        connector = {
+            'initiator': initiator,
+            'multipath': True
+        }
+        props = self.drv.initialize_connection(self.test_vol, connector)
+        self.drv._get_provider_info.assert_called_once_with()
+        self.assertEqual('iscsi', props['driver_volume_type'])
+        self.assertEqual(self.test_vol['id'], props['data']['volume_id'])
+        self.assertEqual([lcfg.zfssa_target_portal],
+                         props['data']['target_portals'])
+        self.assertEqual([test_target_iqn], props['data']['target_iqns'])
+        self.assertEqual([int(lu_number)], props['data']['target_luns'])
         self.assertFalse(props['data']['target_discovered'])
         self.drv.zfssa.set_lun_initiatorgroup.assert_called_with(
             lcfg.zfssa_pool,
@@ -897,6 +966,66 @@ class TestZFSSAISCSIDriver(test.TestCase):
             lcfg.zfssa_cache_project,
             volname)
 
+    def test_get_manageable_volumes(self):
+        lcfg = self.configuration
+
+        self.drv.zfssa.get_all_luns.return_value = [
+            {'name': 'volume-11111111-1111-1111-1111-111111111111',
+             'size': 111 * units.Gi,
+             'cinder_managed': True},
+            {'name': 'volume2',
+             'size': 222 * units.Gi,
+             'cinder_managed': False},
+            {'name': 'volume-33333333-3333-3333-3333-333333333333',
+             'size': 333 * units.Gi,
+             'cinder_managed': True},
+            {'name': 'volume4',
+             'size': 444 * units.Gi}
+        ]
+
+        cinder_vols = [{'id': '11111111-1111-1111-1111-111111111111'}]
+        args = (cinder_vols, None, 1000, 0, ['size'], ['asc'])
+
+        lcfg.zfssa_manage_policy = 'strict'
+        expected = [
+            {'reference': {'source-name':
+                           'volume-11111111-1111-1111-1111-111111111111'},
+             'size': 111,
+             'safe_to_manage': False,
+             'reason_not_safe': 'already managed',
+             'cinder_id': '11111111-1111-1111-1111-111111111111',
+             'extra_info': None},
+            {'reference': {'source-name': 'volume2'},
+             'size': 222,
+             'safe_to_manage': True,
+             'reason_not_safe': None,
+             'cinder_id': None,
+             'extra_info': None},
+            {'reference': {'source-name':
+                           'volume-33333333-3333-3333-3333-333333333333'},
+             'size': 333,
+             'safe_to_manage': False,
+             'reason_not_safe': 'managed by another cinder instance?',
+             'cinder_id': None,
+             'extra_info': None},
+            {'reference': {'source-name': 'volume4'},
+             'size': 444,
+             'safe_to_manage': False,
+             'reason_not_safe': 'cinder_managed schema not present',
+             'cinder_id': None,
+             'extra_info': None},
+        ]
+
+        result = self.drv.get_manageable_volumes(*args)
+        self.assertEqual(expected, result)
+
+        lcfg.zfssa_manage_policy = 'loose'
+        expected[3]['safe_to_manage'] = True
+        expected[3]['reason_not_safe'] = None
+
+        result = self.drv.get_manageable_volumes(*args)
+        self.assertEqual(expected, result)
+
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_get_existing_vol')
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_verify_volume_to_manage')
     def test_volume_manage(self, _get_existing_vol, _verify_volume_to_manage):
@@ -962,6 +1091,13 @@ class TestZFSSAISCSIDriver(test.TestCase):
         self.assertRaises(exception.ManageExistingInvalidReference,
                           self.drv.manage_existing, {'name': 'cindervol'},
                           {'source-id': 'volume-567'})
+
+    def test_volume_manage_nonexistent(self):
+        self.drv.zfssa.get_lun.side_effect = \
+            exception.VolumeNotFound(volume_id='bogus_lun')
+        self.assertRaises(exception.ManageExistingInvalidReference,
+                          self.drv.manage_existing, {'name': 'cindervol'},
+                          {'source-name': 'bogus_lun'})
 
     @mock.patch.object(iscsi.ZFSSAISCSIDriver, '_verify_volume_to_manage')
     def test_volume_manage_negative_api_exception(self,
@@ -1033,14 +1169,10 @@ class TestZFSSANFSDriver(test.TestCase):
         'size': test_vol['size']
     }
 
-    def __init__(self, method):
-        super(TestZFSSANFSDriver, self).__init__(method)
-
-    @mock.patch.object(zfssanfs, 'factory_zfssa')
-    def setUp(self, _factory_zfssa):
+    def setUp(self):
         super(TestZFSSANFSDriver, self).setUp()
         self._create_fake_config()
-        _factory_zfssa.return_value = mock.MagicMock(spec=rest.ZFSSANfsApi)
+        self.mock_object(zfssanfs, 'factory_zfssa', spec=rest.ZFSSAApi)
         self.mock_object(volume_utils, 'get_max_over_subscription_ratio',
                          return_value=1.0)
         self.drv = zfssanfs.ZFSSANFSDriver(configuration=self.configuration)
@@ -1522,9 +1654,7 @@ class TestZFSSANFSDriver(test.TestCase):
 
 
 class TestZFSSAApi(test.TestCase):
-
-    @mock.patch.object(rest, 'factory_restclient')
-    def setUp(self, _restclient):
+    def setUp(self):
         super(TestZFSSAApi, self).setUp()
         self.host = 'fakehost'
         self.user = 'fakeuser'
@@ -1535,7 +1665,7 @@ class TestZFSSAApi(test.TestCase):
         self.snap = 'fakesnapshot'
         self.clone = 'fakeclone'
         self.targetalias = 'fakealias'
-        _restclient.return_value = mock.MagicMock(spec=client.RestClientURL)
+        self.mock_object(rest, 'factory_restclient', spec=rest.ZFSSAApi)
         self.zfssa = rest.ZFSSAApi()
         self.zfssa.set_host('fakehost')
         self.pool_url = '/api/storage/v1/pools/'
@@ -1701,11 +1831,51 @@ class TestZFSSAApi(test.TestCase):
                           self.pool,
                           self.project)
 
+    def test_get_pool_stats_not_owned(self):
+        # Case where the pool is owned by the cluster peer when cluster
+        # is active. In this case, we should fail, because the driver is
+        # configured to talk to the wrong control head.
+        pool_data = {'pool': {'asn': 'fake-asn-b',
+                     'owner': 'fakepeer'}}
+        version_data = {'version': {'asn': 'fake-asn-a',
+                        'nodename': 'fakehost'}}
+        cluster_data = {'cluster': {'peer_hostname': 'fakepeer',
+                                    'peer_asn': 'fake-asn-b',
+                                    'peer_state': 'AKCS_CLUSTERED'}}
+        self.zfssa.rclient.get.side_effect = [
+            self._create_response(client.Status.OK,
+                                  json.dumps(pool_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(version_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(cluster_data))]
+        self.assertRaises(exception.InvalidInput,
+                          self.zfssa.get_pool_details,
+                          self.pool)
+
+    def test_get_pool_stats_stripped(self):
+        # Case where the pool is owned by the cluster peer when it is in a
+        # stripped state. In this case, so long as the owner and ASN for the
+        # pool match the peer, we should not fail.
+        pool_data = {'pool': {'asn': 'fake-asn-a',
+                     'owner': 'fakehost'}}
+        version_data = {'version': {'asn': 'fake-asn-b',
+                        'nodename': 'fakepeer'}}
+        cluster_data = {'cluster': {'peer_hostname': 'fakehost',
+                                    'peer_asn': 'fake-asn-a',
+                                    'peer_state': 'AKCS_STRIPPED'}}
+        self.zfssa.rclient.get.side_effect = [
+            self._create_response(client.Status.OK,
+                                  json.dumps(pool_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(version_data)),
+            self._create_response(client.Status.OK,
+                                  json.dumps(cluster_data))]
+        self.zfssa.get_pool_details(self.pool)
+
 
 class TestZFSSANfsApi(test.TestCase):
-
-    @mock.patch.object(rest, 'factory_restclient')
-    def setUp(self, _restclient):
+    def setUp(self):
         super(TestZFSSANfsApi, self).setUp()
         self.host = 'fakehost'
         self.user = 'fakeuser'
@@ -1715,7 +1885,7 @@ class TestZFSSANfsApi(test.TestCase):
         self.share = 'fakeshare'
         self.snap = 'fakesnapshot'
         self.targetalias = 'fakealias'
-        _restclient.return_value = mock.MagicMock(spec=client.RestClientURL)
+        self.mock_object(rest, 'factory_restclient', spec=rest.ZFSSAApi)
         self.webdavclient = mock.MagicMock(spec=webdavclient.ZFSSAWebDAVClient)
         self.zfssa = rest.ZFSSANfsApi()
         self.zfssa.set_host('fakehost')

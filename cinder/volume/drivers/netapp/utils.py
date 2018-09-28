@@ -30,6 +30,7 @@ import socket
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import netutils
 import six
 
 from cinder import context
@@ -57,6 +58,7 @@ BACKEND_QOS_CONSUMERS = frozenset(['back-end', 'both'])
 # Secret length cannot be less than 96 bits. http://tools.ietf.org/html/rfc3723
 CHAP_SECRET_LENGTH = 16
 DEFAULT_CHAP_USER_NAME = 'NetApp_iSCSI_CHAP_Username'
+API_TRACE_PATTERN = '(.*)'
 
 
 def validate_instantiation(**kwargs):
@@ -127,6 +129,25 @@ def get_volume_extra_specs(volume):
     return extra_specs
 
 
+def setup_api_trace_pattern(api_trace_pattern):
+    global API_TRACE_PATTERN
+    try:
+        re.compile(api_trace_pattern)
+    except (re.error, TypeError):
+        msg = _('Cannot parse the API trace pattern. %s is not a '
+                'valid python regular expression.') % api_trace_pattern
+        raise exception.InvalidConfigurationValue(reason=msg)
+    API_TRACE_PATTERN = api_trace_pattern
+
+
+def trace_filter_func_api(all_args):
+    na_element = all_args.get('na_element')
+    if na_element is None:
+        return True
+    api_name = na_element.get_name()
+    return re.match(API_TRACE_PATTERN, api_name) is not None
+
+
 def resolve_hostname(hostname):
     """Resolves host name to IP address."""
     res = socket.getaddrinfo(hostname, None)[0]
@@ -154,6 +175,9 @@ def log_extra_spec_warnings(extra_specs):
 
 def get_iscsi_connection_properties(lun_id, volume, iqn,
                                     address, port):
+    # literal ipv6 address
+    if netutils.is_valid_ipv6(address):
+        address = netutils.escape_ipv6(address)
 
     properties = {}
     properties['target_discovered'] = False
@@ -263,7 +287,7 @@ def get_pool_name_filter_regex(configuration):
     # If the configuration parameter is specified as an empty string
     # (interpreted as matching all pools), we replace it here with
     # (.+) to be explicit with CSV compatibility support implemented below.
-    pool_patterns = configuration.netapp_pool_name_search_pattern or '(.+)'
+    pool_patterns = configuration.netapp_pool_name_search_pattern or r'(.+)'
 
     # Strip whitespace from start/end and then 'or' all regex patterns
     pool_patterns = '|'.join(['^' + pool_pattern.strip('^$ \t') + '$' for
@@ -339,6 +363,30 @@ def get_legacy_qos_policy(extra_specs):
     if external_policy_name is None:
         return None
     return dict(policy_name=external_policy_name)
+
+
+def get_export_host_junction_path(share):
+    if '[' in share and ']' in share:
+        try:
+            # ipv6
+            host = re.search('\[(.*)\]', share).group(1)
+            junction_path = share.split(':')[-1]
+        except AttributeError:
+            raise exception.NetAppDriverException(_("Share '%s' is "
+                                                    "not in a valid "
+                                                    "format.") % share)
+    else:
+        # ipv4
+        path = share.split(':')
+        if len(path) == 2:
+            host = path[0]
+            junction_path = path[1]
+        else:
+            raise exception.NetAppDriverException(_("Share '%s' is "
+                                                    "not in a valid "
+                                                    "format.") % share)
+
+    return host, junction_path
 
 
 class hashabledict(dict):

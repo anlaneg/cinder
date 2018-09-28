@@ -133,9 +133,10 @@ class VolumeAPI(rpc.RPCAPI):
         3.14 - Adds enable_replication, disable_replication,
                failover_replication, and list_replication_targets.
         3.15 - Add revert_to_snapshot method
+        3.16 - Add no_snapshots to accept_transfer method
     """
 
-    RPC_API_VERSION = '3.15'
+    RPC_API_VERSION = '3.16'
     RPC_DEFAULT_VERSION = '3.0'
     TOPIC = constants.VOLUME_TOPIC
     BINARY = constants.VOLUME_BINARY
@@ -169,7 +170,7 @@ class VolumeAPI(rpc.RPCAPI):
     @rpc.assert_min_rpc_version('3.15')
     def revert_to_snapshot(self, ctxt, volume, snapshot):
         version = self._compat_ver('3.15')
-        cctxt = self._get_cctxt(volume.host, version)
+        cctxt = self._get_cctxt(volume.service_topic_queue, version)
         cctxt.cast(ctxt, 'revert_to_snapshot', volume=volume,
                    snapshot=snapshot)
 
@@ -238,10 +239,17 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt = self._get_cctxt(fanout=True)
         cctxt.cast(ctxt, 'publish_service_capabilities')
 
-    def accept_transfer(self, ctxt, volume, new_user, new_project):
-        cctxt = self._get_cctxt(volume.service_topic_queue)
-        return cctxt.call(ctxt, 'accept_transfer', volume_id=volume['id'],
-                          new_user=new_user, new_project=new_project)
+    def accept_transfer(self, ctxt, volume, new_user, new_project,
+                        no_snapshots=False):
+        msg_args = {'volume_id': volume['id'],
+                    'new_user': new_user,
+                    'new_project': new_project,
+                    'no_snapshots': no_snapshots
+                    }
+        cctxt = self._get_cctxt(volume.service_topic_queue, ('3.16', '3.0'))
+        if not self.client.can_send_version('3.16'):
+            msg_args.pop('no_snapshots')
+        return cctxt.call(ctxt, 'accept_transfer', **msg_args)
 
     def extend_volume(self, ctxt, volume, new_size, reservations):
         cctxt = self._get_cctxt(volume.service_topic_queue)
@@ -290,7 +298,7 @@ class VolumeAPI(rpc.RPCAPI):
 
     def update_migrated_volume(self, ctxt, volume, new_volume,
                                original_volume_status):
-        cctxt = self._get_cctxt(new_volume['host'])
+        cctxt = self._get_cctxt(new_volume.service_topic_queue)
         cctxt.call(ctxt, 'update_migrated_volume',
                    volume=volume,
                    new_volume=new_volume,
@@ -434,7 +442,7 @@ class VolumeAPI(rpc.RPCAPI):
     @rpc.assert_min_rpc_version('3.9')
     def attachment_update(self, ctxt, vref, connector, attachment_id):
         version = self._compat_ver('3.9')
-        cctxt = self._get_cctxt(vref.host, version=version)
+        cctxt = self._get_cctxt(vref.service_topic_queue, version=version)
         return cctxt.call(ctxt,
                           'attachment_update',
                           vref=vref,
@@ -444,7 +452,7 @@ class VolumeAPI(rpc.RPCAPI):
     @rpc.assert_min_rpc_version('3.9')
     def attachment_delete(self, ctxt, attachment_id, vref):
         version = self._compat_ver('3.9')
-        cctxt = self._get_cctxt(vref.host, version=version)
+        cctxt = self._get_cctxt(vref.service_topic_queue, version=version)
         return cctxt.call(ctxt,
                           'attachment_delete',
                           attachment_id=attachment_id,
@@ -472,26 +480,26 @@ class VolumeAPI(rpc.RPCAPI):
 
     @rpc.assert_min_rpc_version('3.14')
     def enable_replication(self, ctxt, group):
-        cctxt = self._get_cctxt(group.host, version='3.14')
+        cctxt = self._get_cctxt(group.service_topic_queue, version='3.14')
         cctxt.cast(ctxt, 'enable_replication',
                    group=group)
 
     @rpc.assert_min_rpc_version('3.14')
     def disable_replication(self, ctxt, group):
-        cctxt = self._get_cctxt(group.host, version='3.14')
+        cctxt = self._get_cctxt(group.service_topic_queue, version='3.14')
         cctxt.cast(ctxt, 'disable_replication',
                    group=group)
 
     @rpc.assert_min_rpc_version('3.14')
     def failover_replication(self, ctxt, group, allow_attached_volume=False,
                              secondary_backend_id=None):
-        cctxt = self._get_cctxt(group.host, version='3.14')
+        cctxt = self._get_cctxt(group.service_topic_queue, version='3.14')
         cctxt.cast(ctxt, 'failover_replication',
                    group=group, allow_attached_volume=allow_attached_volume,
                    secondary_backend_id=secondary_backend_id)
 
     @rpc.assert_min_rpc_version('3.14')
     def list_replication_targets(self, ctxt, group):
-        cctxt = self._get_cctxt(group.host, version='3.14')
+        cctxt = self._get_cctxt(group.service_topic_queue, version='3.14')
         return cctxt.call(ctxt, 'list_replication_targets',
                           group=group)

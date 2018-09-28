@@ -395,8 +395,49 @@ Add ``shared_targets`` and ``service_uuid`` fields to volume.
 ----
 Support report backend storage state in service list.
 
-3.50
-----
+3.50 (Maximum in Queens)
+------------------------
 Services supporting this microversion are capable of volume multiattach.
 This version does not need to be requested when creating the volume, but can
 be used as a way to query if the capability exists in the Cinder service.
+
+3.51
+----
+Add support for cross AZ backups.
+
+3.52
+----
+``RESKEY:availability_zones`` is a reserved spec key for AZ volume type,
+and filter volume type by ``extra_specs`` is supported now.
+
+3.53
+----
+Schema validation support has been added using jsonschema for V2/V3
+volume APIs.
+
+- Create volume API
+    Before 3.53, create volume API used to accept any invalid parameters in the
+    request body like the ones below were passed by python-cinderclient.
+
+    1. user_id
+    2. project_id
+    3. status
+    4. attach_status
+
+    But in 3.53, this behavior is updated. If user passes any invalid
+    parameters to the API which are not documented in api-ref, then
+    it will raise badRequest error.
+
+- Update volume API
+    Before 3.53, even if user doesn't pass any valid parameters in the request body,
+    the volume was updated.
+    But in 3.53, user will need to pass at least one valid parameter in the request
+    body otherwise it will return 400 error.
+
+3.54
+----
+Add ``mode`` argument to attachment-create.
+
+3.55 (Maximum in Rocky)
+-----------------------
+Support ability to transfer snapshots along with their parent volume.

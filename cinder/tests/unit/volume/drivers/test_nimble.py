@@ -229,7 +229,7 @@ class NimbleDriverBaseTestCase(test.TestCase):
     @staticmethod
     def client_mock_decorator_fc(configuration):
         def client_mock_wrapper(func):
-            def inner_clent_mock(
+            def inner_client_mock(
                     self, mock_client_class, mock_urllib2, *args, **kwargs):
                 self.mock_client_class = mock_client_class
                 self.mock_client_service = mock.MagicMock(name='Client')
@@ -245,7 +245,7 @@ class NimbleDriverBaseTestCase(test.TestCase):
                 self.driver.do_setup(context.get_admin_context())
                 self.driver.APIExecutor.login()
                 func(self, *args, **kwargs)
-            return inner_clent_mock
+            return inner_client_mock
         return client_mock_wrapper
 
 
@@ -698,6 +698,8 @@ class NimbleDriverVolumeTestCase(NimbleDriverBaseTestCase):
             {'name': 'testvolume'})
         expected_calls = [mock.call.online_vol(
             'testvolume', False),
+            mock.call.delete_vol('testvolume'),
+            mock.call.delete_vol('testvolume'),
             mock.call.delete_vol('testvolume'),
             mock.call.online_vol('testvolume', True)]
         self.mock_client_service.assert_has_calls(expected_calls)

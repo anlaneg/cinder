@@ -71,7 +71,7 @@ since v3.31 if non-admin users specify invalid filters in the url, API will
 return bad request.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -108,7 +108,6 @@ Response Parameters
    - os-vol-host-attr:host: os-vol-host-attr:host
    - encrypted: encrypted
    - updated_at: updated_at
-   - os-volume-replication:extended_status: os-volume-replication:extended_status
    - replication_status: replication_status
    - snapshot_id: snapshot_id
    - id: id_5
@@ -116,7 +115,7 @@ Response Parameters
    - user_id: user_id
    - os-vol-tenant-attr:tenant_id: os-vol-tenant-attr:tenant_id
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
-   - metadata: metadata
+   - metadata: metadata_1
    - status: status_3
    - volume_image_metadata: volume_image_metadata
    - description: description_9
@@ -127,7 +126,6 @@ Response Parameters
    - name: name_13
    - bootable: bootable_response
    - created_at: created_at
-   - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volumes: volumes
    - volume_type: volume_type_6
    - count: count
@@ -180,7 +178,7 @@ Troubleshooting
   of the volume creation request.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -201,10 +199,10 @@ Request
    - multiattach: multiattach_req
    - snapshot_id: snapshot_id
    - backup_id: backup_id_1
-   - name: name_13
+   - name: volume_name_optional
    - imageRef: imageRef
    - volume_type: volume_type_2
-   - metadata: metadata
+   - metadata: metadata_10
    - consistencygroup_id: consistencygroup_id
    - OS-SCH-HNT:scheduler_hints: OS-SCH-HNT:scheduler_hints
 
@@ -232,7 +230,7 @@ Response Parameters
    - id: id_5
    - size: size
    - user_id: user_id
-   - metadata: metadata
+   - metadata: metadata_1
    - status: status_3
    - description: description_9
    - multiattach: multiattach_resp
@@ -262,7 +260,7 @@ filters in the url, API will return bad request.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -321,7 +319,7 @@ Preconditions
 - The volume must exist.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -349,7 +347,6 @@ Response Parameters
    - os-vol-host-attr:host: os-vol-host-attr:host
    - encrypted: encrypted
    - updated_at: updated_at
-   - os-volume-replication:extended_status: os-volume-replication:extended_status
    - replication_status: replication_status
    - snapshot_id: snapshot_id
    - id: id_5
@@ -357,7 +354,7 @@ Response Parameters
    - user_id: user_id
    - os-vol-tenant-attr:tenant_id: os-vol-tenant-attr:tenant_id
    - os-vol-mig-status-attr:migstat: os-vol-mig-status-attr:migstat
-   - metadata: metadata
+   - metadata: metadata_1
    - status: status_3
    - volume_image_metadata: volume_image_metadata
    - description: description_9
@@ -369,7 +366,6 @@ Response Parameters
    - name: name_13
    - bootable: bootable_response
    - created_at: created_at
-   - os-volume-replication:driver_data: os-volume-replication:driver_data
    - volume_type: volume_type_6
    - service_uuid: service_uuid
    - shared_targets: shared_targets
@@ -392,7 +388,7 @@ Update a volume
 Updates a volume.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -408,8 +404,8 @@ Request
    - volume_id: volume_id_path
    - volume: volume
    - description: description_5
-   - name: name_8
-   - metadata: metadata
+   - name: volume_name_optional
+   - metadata: metadata_2
 
 Request Example
 ---------------
@@ -435,7 +431,7 @@ Response Parameters
    - id: id_5
    - size: size
    - user_id: user_id
-   - metadata: metadata
+   - metadata: metadata_1
    - status: status_3
    - description: description_9
    - multiattach: multiattach_resp
@@ -464,8 +460,9 @@ Deletes a volume.
 
 Preconditions
 
-- Volume status must be ``available``, ``in-use``, ``error``, or
-  ``error_restoring``.
+- Volume status must be ``available``, ``in-use``, ``error``,
+  ``error_restoring``, ``error_extending``, ``error_managing``,
+  and must not be migrating, attached, belong to a group or have snapshots.
 
 - You cannot already have a snapshot of the volume.
 
@@ -488,7 +485,7 @@ Troubleshooting
   the storage system.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -515,7 +512,7 @@ Creates or replaces metadata for a volume. Does not modify items that are not
 in the request.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -563,7 +560,7 @@ Shows metadata for a volume.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -604,7 +601,7 @@ Replaces all the volume's metadata with the key-value pairs in the request.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -652,7 +649,7 @@ Show a volume's metadata for a specific key
 Shows metadata for a volume for a specific key.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -694,7 +691,7 @@ Delete a volume's metadata
 Deletes metadata for a volume.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -720,7 +717,7 @@ Update metadata for a volume for a specific key.
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -766,7 +763,7 @@ Display volumes summary with total number of volumes and total size in GB
 
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

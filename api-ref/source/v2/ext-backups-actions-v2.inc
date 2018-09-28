@@ -13,13 +13,13 @@ Force-delete backup
 
 Force-deletes a backup. Specify the ``os-force_delete`` action in the request body.
 
-This operations deletes the backup and any backup data.
+This operation deletes the backup and any backup data.
 
 The backup driver returns the ``405`` status code if it does not
 support this operation.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -55,7 +55,7 @@ Reset backup's status
 Reset a backup's status. Specify the ``os-reset_status`` action in the request body.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

@@ -29,7 +29,7 @@ cgsnapshot_id_1:
   description: |
     The ID of the consistency group snapshot.
   in: path
-  required: false
+  required: true
   type: string
 encryption_id:
   description: |
@@ -293,6 +293,19 @@ backup:
   in: body
   required: true
   type: object
+backup_gigabytes:
+  description: |
+    The size (GB) of backups that are allowed for each project.
+  in: body
+  required: true
+  type: integer
+backup_record:
+  description: |
+    An object recording volume backup metadata, including ``backup_service``
+    and ``backup_url``.
+  in: body
+  required: true
+  type: object
 backup_service:
   description: |
     The service used to perform the backup.
@@ -301,7 +314,7 @@ backup_service:
   type: string
 backup_url:
   description: |
-    The backup encoded metadata.
+    An identifier string to locate the backup.
   in: body
   required: true
   type: string
@@ -619,8 +632,8 @@ free_capacity:
   type: string
 has_dependent_backups:
   description: |
-    If this value is ``true``, the backup depends on
-    other backups.
+    If this value is ``true``, there are other backups depending on
+    this backup.
   in: body
   required: false
   type: boolean
@@ -967,6 +980,29 @@ metadata_items:
   in: body
   required: true
   type: integer
+migrate_force_host_copy:
+  description: |
+    If false (the default), rely on the volume backend driver to perform
+    the migration, which might be optimized. If true, or the volume driver
+    fails to migrate the volume itself, a generic host-based migration is
+    performed.
+  in: body
+  required: false
+  type: boolean
+migrate_host:
+  description: |
+    The target host for the volume migration. Host format is ``host@backend``.
+  in: body
+  required: true
+  type: string
+migrate_lock_volume:
+  description: |
+    If true, migrating an ``available`` volume will change its status to
+    ``maintenance`` preventing other operations from being performed on the
+    volume such as attach, detach, retype, etc.
+  in: body
+  required: false
+  type: boolean
 # NOTE(mriedem): We can update the migration_policy retype note about encrypted
 # in-use volumes not being supported once
 # https://bugzilla.redhat.com/show_bug.cgi?id=760547 is fixed.
@@ -1067,6 +1103,12 @@ name_15:
   in: body
   required: false
   type: string
+name_16:
+  description: |
+    The name of the backend pool.
+  in: body
+  required: true
+  type: string
 name_2:
   description: |
     The consistency group snapshot name.
@@ -1102,12 +1144,6 @@ name_7:
     The name of the volume type.
   in: body
   required: true
-  type: string
-name_8:
-  description: |
-    The volume name.
-  in: body
-  required: false
   type: string
 name_9:
   description: |
@@ -1188,6 +1224,12 @@ os-force_detach:
   in: body
   required: true
   type: object
+os-migrate_volume:
+  description: |
+    The ``os-migrate_volume`` action.
+  in: body
+  required: true
+  type: object
 os-reset_status:
   description: |
     The ``os-reset_status`` action.
@@ -1265,25 +1307,13 @@ os-vol-tenant-attr:tenant_id:
   in: body
   required: true
   type: string
-os-volume-replication:driver_data:
+per_volume_gigabytes:
   description: |
-    The name of the volume replication driver.
+    The size (GB) of volumes in request that are allowed for each
+    volume.
   in: body
-  required: false
-  type: string
-os-volume-replication:extended_status:
-  description: |
-    The volume replication status managed by the
-    driver of backend storage.
-  in: body
-  required: false
-  type: string
-os-volume-replication:extended_status_1:
-  description: |
-    The status of the volume replication.
-  in: body
-  required: false
-  type: string
+  required: true
+  type: integer
 perVolumeGigabytes:
   description: |
     The maximum amount of storage per volume, in gibibytes (GiB).
@@ -1489,7 +1519,7 @@ snapshot_id_2:
   description: |
     The UUID of the source volume snapshot.
   in: body
-  required: true
+  required: false
   type: string
 source_cgid:
   description: |
@@ -1506,8 +1536,8 @@ source_replica:
   type: string
 source_volid:
   description: |
-    The UUID of the source volume. The API creates a
-    new volume with the same size as the source volume.
+    The UUID of the source volume. The API creates a new volume with the same
+    size as the source volume unless a larger size is requested.
   in: body
   required: false
   type: string
@@ -1605,6 +1635,12 @@ totalVolumesUsed:
   in: body
   required: true
   type: integer
+transfer:
+  description: |
+    The volume transfer object.
+  in: body
+  required: true
+  type: object
 updated:
   description: |
     The date and time stamp when the extension was
@@ -1729,6 +1765,12 @@ volume_name:
     The volume name.
   in: body
   required: true
+  type: string
+volume_name_optional:
+  description: |
+    The volume name.
+  in: body
+  required: false
   type: string
 volume_type_1:
   description: |

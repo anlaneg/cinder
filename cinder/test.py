@@ -28,6 +28,7 @@ import uuid
 
 from eventlet import tpool
 import fixtures
+from keystonemiddleware import auth_token
 import mock
 from oslo_concurrency import lockutils
 from oslo_config import fixture as config_fixture
@@ -194,7 +195,7 @@ class TestCase(testtools.TestCase):
         self.addCleanup(rpc.cleanup)
 
         self.messaging_conf = messaging_conffixture.ConfFixture(CONF)
-        self.messaging_conf.transport_driver = 'fake'
+        self.messaging_conf.transport_url = 'fake:/'
         self.messaging_conf.response_timeout = 15
         self.useFixture(self.messaging_conf)
 
@@ -214,6 +215,11 @@ class TestCase(testtools.TestCase):
         # test.
         rpc.LAST_OBJ_VERSIONS = {}
         rpc.LAST_RPC_VERSIONS = {}
+
+        # Init AuthProtocol to register some base options first, such as
+        # auth_url.
+        auth_token.AuthProtocol('fake_app', {'auth_type': 'password',
+                                             'auth_url': 'fake_url'})
 
         conf_fixture.set_defaults(CONF)
         CONF([], default_config_files=[])
@@ -301,6 +307,9 @@ class TestCase(testtools.TestCase):
         # threads from other test runs.
         tpool.killall()
         tpool._nthreads = 20
+
+        # NOTE(mikal): make sure we don't load a privsep helper accidentally
+        self.useFixture(cinder_fixtures.PrivsepNoHelperFixture())
 
     def _restore_obj_registry(self):
         objects_base.CinderObjectRegistry._registry._obj_classes = \

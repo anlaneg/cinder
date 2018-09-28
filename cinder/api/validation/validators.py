@@ -23,13 +23,23 @@ import re
 
 import jsonschema
 from jsonschema import exceptions as jsonschema_exc
+from oslo_utils import strutils
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
 import six
+import webob.exc
 
+from cinder import db
 from cinder import exception
 from cinder.i18n import _
 from cinder.objects import fields as c_fields
+from cinder import quota
+from cinder import utils
+
+
+QUOTAS = quota.QUOTAS
+GROUP_QUOTAS = quota.GROUP_QUOTAS
+NON_QUOTA_KEYS = quota.NON_QUOTA_KEYS
 
 
 def _soft_validate_additional_properties(
@@ -85,6 +95,34 @@ def _soft_validate_additional_properties(
             del param_value[prop]
 
 
+def _validate_string_length(value, entity_name, mandatory=False,
+                            min_length=0, max_length=None,
+                            remove_whitespaces=False):
+    """Check the length of specified string.
+
+    :param value: the value of the string
+    :param entity_name: the name of the string
+    :mandatory: string is mandatory or not
+    :param min_length: the min_length of the string
+    :param max_length: the max_length of the string
+    :param remove_whitespaces: True if trimming whitespaces is needed
+                                   else False
+    """
+    if not mandatory and not value:
+        return True
+
+    if mandatory and not value:
+        msg = _("The '%s' can not be None.") % entity_name
+        raise webob.exc.HTTPBadRequest(explanation=msg)
+
+    if remove_whitespaces:
+        value = value.strip()
+
+    utils.check_string_length(value, entity_name,
+                              min_length=min_length,
+                              max_length=max_length)
+
+
 @jsonschema.FormatChecker.cls_checks('date-time')
 def _validate_datetime_format(param_value):
     try:
@@ -103,6 +141,22 @@ def _validate_name(param_value):
     elif len(param_value.strip()) == 0:
         msg = _("The 'name' can not be empty.")
         raise exception.InvalidName(reason=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('name_skip_leading_trailing_spaces',
+                                     exception.InvalidName)
+def _validate_name_skip_leading_trailing_spaces(param_value):
+    if not param_value:
+        msg = _("The 'name' can not be None.")
+        raise exception.InvalidName(reason=msg)
+    param_value = param_value.strip()
+    if len(param_value) == 0:
+        msg = _("The 'name' can not be empty.")
+        raise exception.InvalidName(reason=msg)
+    elif len(param_value) > 255:
+        msg = _("The 'name' can not be greater than 255 characters.")
+        raise exception.InvalidInput(reason=msg)
     return True
 
 
@@ -125,6 +179,21 @@ def _validate_status(param_value):
     return True
 
 
+@jsonschema.FormatChecker.cls_checks('progress')
+def _validate_progress(progress):
+    if progress:
+        try:
+            integer = int(progress[:-1])
+        except ValueError:
+            msg = _('progress must be an integer percentage')
+            raise exception.InvalidInput(reason=msg)
+        if integer < 0 or integer > 100 or progress[-1] != '%':
+            msg = _('progress must be an integer percentage between'
+                    ' 0 and 100')
+            raise exception.InvalidInput(reason=msg)
+    return True
+
+
 @jsonschema.FormatChecker.cls_checks('base64')
 def _validate_base64_format(instance):
     try:
@@ -138,6 +207,196 @@ def _validate_base64_format(instance):
         # TypeError will be raised at here.
         return False
 
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('disabled_reason',
+                                     exception.InvalidInput)
+def _validate_disabled_reason(param_value):
+    _validate_string_length(param_value, 'disabled_reason',
+                            mandatory=False, min_length=1, max_length=255,
+                            remove_whitespaces=True)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks(
+    'name_non_mandatory_remove_white_spaces')
+def _validate_name_non_mandatory_remove_white_spaces(param_value):
+    _validate_string_length(param_value, 'name',
+                            mandatory=False, min_length=0, max_length=255,
+                            remove_whitespaces=True)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks(
+    'description_non_mandatory_remove_white_spaces')
+def _validate_description_non_mandatory_remove_white_spaces(param_value):
+    _validate_string_length(param_value, 'description',
+                            mandatory=False, min_length=0, max_length=255,
+                            remove_whitespaces=True)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('quota_set')
+def _validate_quota_set(quota_set):
+    bad_keys = []
+    for key, value in quota_set.items():
+        if (key not in QUOTAS and key not in GROUP_QUOTAS and key not in
+                NON_QUOTA_KEYS):
+            bad_keys.append(key)
+            continue
+
+        if key in NON_QUOTA_KEYS:
+            continue
+
+        utils.validate_integer(value, key, min_value=-1,
+                               max_value=db.MAX_INT)
+
+    if len(bad_keys) > 0:
+        msg = _("Bad key(s) in quota set: %s") % ", ".join(bad_keys)
+        raise exception.InvalidInput(reason=msg)
+
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('quota_class_set')
+def _validate_quota_class_set(instance):
+    bad_keys = []
+    for key in instance:
+        if key not in QUOTAS and key not in GROUP_QUOTAS:
+            bad_keys.append(key)
+
+    if len(bad_keys) > 0:
+        msg = _("Bad key(s) in quota class set: %s") % ", ".join(bad_keys)
+        raise exception.InvalidInput(reason=msg)
+
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks(
+    'group_status', webob.exc.HTTPBadRequest)
+def _validate_group_status(param_value):
+    if param_value is None:
+        msg = _("The 'status' can not be None.")
+        raise webob.exc.HTTPBadRequest(explanation=msg)
+    if len(param_value.strip()) == 0:
+        msg = _("The 'status' can not be empty.")
+        raise exception.InvalidGroupStatus(reason=msg)
+    if param_value.lower() not in c_fields.GroupSnapshotStatus.ALL:
+        msg = _("Group status: %(status)s is invalid, valid status "
+                "are: %(valid)s.") % {'status': param_value,
+                                      'valid': c_fields.GroupStatus.ALL}
+        raise exception.InvalidGroupStatus(reason=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('availability_zone')
+def _validate_availability_zone(param_value):
+    if param_value is None:
+        return True
+    _validate_string_length(param_value, "availability_zone",
+                            mandatory=True, min_length=1,
+                            max_length=255, remove_whitespaces=True)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks(
+    'group_type', (webob.exc.HTTPBadRequest, exception.InvalidInput))
+def _validate_group_type(param_value):
+    _validate_string_length(param_value, 'group_type',
+                            mandatory=True, min_length=1, max_length=255,
+                            remove_whitespaces=True)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('level')
+def _validate_log_level(level):
+    utils.get_log_method(level)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('validate_volume_reset_body')
+def _validate_volume_reset_body(instance):
+    status = instance.get('status')
+    attach_status = instance.get('attach_status')
+    migration_status = instance.get('migration_status')
+
+    if not status and not attach_status and not migration_status:
+        msg = _("Must specify 'status', 'attach_status' or 'migration_status'"
+                " for update.")
+        raise exception.InvalidParameterValue(err=msg)
+
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('volume_status')
+def _validate_volume_status(param_value):
+    if param_value and param_value.lower() not in c_fields.VolumeStatus.ALL:
+        msg = _("Volume status: %(status)s is invalid, "
+                "valid statuses are: "
+                "%(valid)s.") % {'status': param_value,
+                                 'valid': c_fields.VolumeStatus.ALL}
+        raise exception.InvalidParameterValue(err=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('volume_attach_status')
+def _validate_volume_attach_status(param_value):
+    valid_attach_status = [c_fields.VolumeAttachStatus.ATTACHED,
+                           c_fields.VolumeAttachStatus.DETACHED]
+    if param_value and param_value.lower() not in valid_attach_status:
+        msg = _("Volume attach status: %(status)s is invalid, "
+                "valid statuses are: "
+                "%(valid)s.") % {'status': param_value,
+                                 'valid': valid_attach_status}
+        raise exception.InvalidParameterValue(err=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('volume_migration_status')
+def _validate_volume_migration_status(param_value):
+    if param_value and (
+            param_value.lower() not in c_fields.VolumeMigrationStatus.ALL):
+        msg = _("Volume migration status: %(status)s is invalid, "
+                "valid statuses are: "
+                "%(valid)s.") % {'status': param_value,
+                                 'valid': c_fields.VolumeMigrationStatus.ALL}
+        raise exception.InvalidParameterValue(err=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('snapshot_status')
+def _validate_snapshot_status(param_value):
+    if not param_value or (
+            param_value.lower() not in c_fields.SnapshotStatus.ALL):
+        msg = _("Snapshot status: %(status)s is invalid, "
+                "valid statuses are: "
+                "%(valid)s.") % {'status': param_value,
+                                 'valid': c_fields.SnapshotStatus.ALL}
+        raise exception.InvalidParameterValue(err=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('backup_status')
+def _validate_backup_status(param_value):
+    valid_status = [c_fields.BackupStatus.AVAILABLE,
+                    c_fields.BackupStatus.ERROR]
+    if not param_value or (
+            param_value.lower() not in valid_status):
+        msg = _("Backup status: %(status)s is invalid, "
+                "valid statuses are: "
+                "%(valid)s.") % {'status': param_value,
+                                 'valid': valid_status}
+        raise exception.InvalidParameterValue(err=msg)
+    return True
+
+
+@jsonschema.FormatChecker.cls_checks('key_size')
+def _validate_key_size(param_value):
+    if param_value is not None:
+        if not strutils.is_int_like(param_value):
+            raise exception.InvalidInput(reason=(
+                _('key_size must be an integer.')))
     return True
 
 

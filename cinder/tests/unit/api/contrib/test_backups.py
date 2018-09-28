@@ -37,6 +37,7 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import objects
 from cinder.objects import fields
+from cinder import quota
 from cinder import test
 from cinder.tests.unit.api import fakes
 from cinder.tests.unit import fake_constants as fake
@@ -595,6 +596,38 @@ class BackupsAPITestCase(test.TestCase):
 
         volume.destroy()
 
+    @mock.patch('cinder.objects.Service.is_up', mock.Mock(return_value=True))
+    @mock.patch('cinder.db.service_get_all')
+    def test_create_backup_with_availability_zone(self, _mock_service_get_all):
+        vol_az = 'az1'
+        backup_svc_az = 'az2'
+        _mock_service_get_all.return_value = [
+            {'availability_zone': backup_svc_az, 'host': 'testhost',
+             'disabled': 0, 'updated_at': timeutils.utcnow(),
+             'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}]
+
+        volume = utils.create_volume(self.context, availability_zone=vol_az,
+                                     size=1)
+        # Create a backup with metadata
+        body = {'backup': {'name': 'nightly001',
+                           'volume_id': volume.id,
+                           'container': 'nightlybackups',
+                           'availability_zone': backup_svc_az}}
+        req = webob.Request.blank('/v3/%s/backups' % fake.PROJECT_ID)
+        req.method = 'POST'
+        req.headers = mv.get_mv_header(mv.BACKUP_AZ)
+        req.headers['Content-Type'] = 'application/json'
+        req.body = jsonutils.dump_as_bytes(body)
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+
+        self.assertEqual(202, res.status_code)
+
+        res_dict = jsonutils.loads(res.body)
+        backup = objects.Backup.get_by_id(self.context,
+                                          res_dict['backup']['id'])
+        self.assertEqual(backup_svc_az, backup.availability_zone)
+
     @mock.patch('cinder.db.service_get_all')
     def test_create_backup_inuse_no_force(self,
                                           _mock_service_get_all):
@@ -955,6 +988,25 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual('Volume %s could not be found.' %
                          fake.WILL_NOT_BE_FOUND_ID,
                          res_dict['itemNotFound']['message'])
+
+    def test_create_backup_with_invalid_volume_id_format(self):
+        body = {"backup": {"name": "nightly001",
+                           "description":
+                           "Nightly Backup 03-Sep-2012",
+                           "volume_id": 'not a uuid',
+                           "container": "nightlybackups",
+                           }
+                }
+        req = webob.Request.blank('/v2/%s/backups' % fake.PROJECT_ID)
+        req.method = 'POST'
+        req.headers['Content-Type'] = 'application/json'
+        req.body = jsonutils.dump_as_bytes(body)
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+        res_dict = jsonutils.loads(res.body)
+        self.assertEqual(http_client.BAD_REQUEST, res.status_int)
+        self.assertIn("'not a uuid' is not a 'uuid'",
+                      res_dict['badRequest']['message'])
 
     def test_create_backup_with_InvalidVolume(self):
         # need to create the volume referenced below first
@@ -1388,6 +1440,27 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual(http_client.NOT_FOUND, res.status_int)
 
         backup.destroy()
+
+    @mock.patch('cinder.backup.manager.BackupManager.is_working')
+    @mock.patch('cinder.db.service_get_all')
+    def test_delete_backup_service_is_none_and_is_not_working(
+            self, _mock_service_get_all, _mock_backup_is_working):
+        _mock_service_get_all.return_value = [
+            {'availability_zone': 'az1', 'host': 'testhost',
+             'disabled': 0, 'updated_at': timeutils.utcnow(),
+             'uuid': 'a3a593da-7f8d-4bb7-8b4c-f2bc1e0b4824'}]
+        _mock_backup_is_working.return_value = False
+        backup = utils.create_backup(self.context,
+                                     status=fields.BackupStatus.AVAILABLE,
+                                     availability_zone='az1', host='testhost',
+                                     service=None)
+        req = webob.Request.blank('/v2/%s/backups/%s' % (
+                                  fake.PROJECT_ID, backup.id))
+        req.method = 'DELETE'
+        req.headers['Content-Type'] = 'application/json'
+        res = req.get_response(fakes.wsgi_app(
+            fake_auth_context=self.user_context))
+        self.assertEqual(http_client.ACCEPTED, res.status_int)
 
     @mock.patch('cinder.backup.api.API._get_available_backup_service_host')
     def test_restore_backup_volume_id_specified_json(
@@ -2002,17 +2075,25 @@ class BackupsAPITestCase(test.TestCase):
         # request is not authorized
         self.assertEqual(http_client.FORBIDDEN, res.status_int)
 
+    @mock.patch.object(quota.QUOTAS, 'commit')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
     @mock.patch('cinder.backup.api.API._list_backup_hosts')
     @mock.patch('cinder.backup.rpcapi.BackupAPI.import_record')
     def test_import_record_volume_id_specified_json(self,
                                                     _mock_import_record_rpc,
-                                                    _mock_list_services):
+                                                    _mock_list_services,
+                                                    mock_reserve,
+                                                    mock_rollback,
+                                                    mock_commit):
         utils.replace_obj_loader(self, objects.Backup)
+        mock_reserve.return_value = "fake_reservation"
         project_id = fake.PROJECT_ID
         backup_service = 'fake'
         ctx = context.RequestContext(fake.USER_ID, project_id, is_admin=True)
         backup = objects.Backup(ctx, id=fake.BACKUP_ID, user_id=fake.USER_ID,
                                 project_id=project_id,
+                                size=1,
                                 status=fields.BackupStatus.AVAILABLE)
         backup_url = backup.encode_record()
         _mock_import_record_rpc.return_value = None
@@ -2040,19 +2121,31 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual(ctx.user_id, db_backup.user_id)
         self.assertEqual(backup_api.IMPORT_VOLUME_ID, db_backup.volume_id)
         self.assertEqual(fields.BackupStatus.CREATING, db_backup.status)
+        mock_reserve.assert_called_with(
+            ctx, backups=1, backup_gigabytes=1)
+        mock_commit.assert_called_with(ctx, "fake_reservation")
 
+    @mock.patch.object(quota.QUOTAS, 'commit')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
     @mock.patch('cinder.backup.api.API._list_backup_hosts')
     @mock.patch('cinder.backup.rpcapi.BackupAPI.import_record')
     def test_import_record_volume_id_exists_deleted(self,
                                                     _mock_import_record_rpc,
-                                                    _mock_list_services):
+                                                    _mock_list_services,
+                                                    mock_reserve,
+                                                    mock_rollback,
+                                                    mock_commit,
+                                                    ):
         ctx = context.RequestContext(fake.USER_ID, fake.PROJECT_ID,
                                      is_admin=True)
+        mock_reserve.return_value = 'fake_reservation'
         utils.replace_obj_loader(self, objects.Backup)
 
         # Original backup belonged to a different user_id and project_id
         backup = objects.Backup(ctx, id=fake.BACKUP_ID, user_id=fake.USER2_ID,
                                 project_id=fake.PROJECT2_ID,
+                                size=1,
                                 status=fields.BackupStatus.AVAILABLE)
         backup_url = backup.encode_record()
 
@@ -2085,6 +2178,8 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual(ctx.user_id, db_backup.user_id)
         self.assertEqual(backup_api.IMPORT_VOLUME_ID, db_backup.volume_id)
         self.assertEqual(fields.BackupStatus.CREATING, db_backup.status)
+        mock_reserve.assert_called_with(ctx, backups=1, backup_gigabytes=1)
+        mock_commit.assert_called_with(ctx, "fake_reservation")
 
         backup_del.destroy()
 
@@ -2137,12 +2232,19 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual("Invalid input received: Can't parse backup record.",
                          res_dict['badRequest']['message'])
 
+    @mock.patch.object(quota.QUOTAS, 'commit')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
     @mock.patch('cinder.backup.api.API._list_backup_hosts')
     def test_import_backup_with_existing_backup_record(self,
-                                                       _mock_list_services):
+                                                       _mock_list_services,
+                                                       mock_reserve,
+                                                       mock_rollback,
+                                                       mock_commit):
         ctx = context.RequestContext(fake.USER_ID, fake.PROJECT_ID,
                                      is_admin=True)
-        backup = utils.create_backup(self.context, fake.VOLUME_ID)
+        mock_reserve.return_value = "fake_reservation"
+        backup = utils.create_backup(self.context, fake.VOLUME_ID, size=1)
         backup_service = 'fake'
         backup_url = backup.encode_record()
         _mock_list_services.return_value = ['no-match1', 'no-match2']
@@ -2161,12 +2263,20 @@ class BackupsAPITestCase(test.TestCase):
                          res_dict['badRequest']['code'])
         self.assertEqual('Invalid backup: Backup already exists in database.',
                          res_dict['badRequest']['message'])
-
+        mock_reserve.assert_called_with(
+            ctx, backups=1, backup_gigabytes=1)
+        mock_rollback.assert_called_with(ctx, "fake_reservation")
         backup.destroy()
 
+    @mock.patch.object(quota.QUOTAS, 'commit')
+    @mock.patch.object(quota.QUOTAS, 'rollback')
+    @mock.patch.object(quota.QUOTAS, 'reserve')
     @mock.patch('cinder.backup.api.API._list_backup_hosts')
     @mock.patch('cinder.backup.rpcapi.BackupAPI.import_record')
     def test_import_backup_with_missing_backup_services(self,
+                                                        mock_reserve,
+                                                        mock_rollback,
+                                                        mock_commit,
                                                         _mock_import_record,
                                                         _mock_list_services):
         ctx = context.RequestContext(fake.USER_ID, fake.PROJECT_ID,

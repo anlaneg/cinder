@@ -24,16 +24,18 @@ from oslo_utils import timeutils
 import six
 from six.moves import StringIO
 
-try:
+# Prevent load failures on macOS
+if sys.platform == 'darwin':
+    rtslib_fb = mock.MagicMock()
+    cinder_rtstool = mock.MagicMock()
+else:
     import rtslib_fb
-except ImportError:
-    import rtslib as rtslib_fb
-
 
 from cinder.cmd import api as cinder_api
 from cinder.cmd import backup as cinder_backup
 from cinder.cmd import manage as cinder_manage
-from cinder.cmd import rtstool as cinder_rtstool
+if sys.platform != 'darwin':
+    from cinder.cmd import rtstool as cinder_rtstool
 from cinder.cmd import scheduler as cinder_scheduler
 from cinder.cmd import volume as cinder_volume
 from cinder.cmd import volume_usage_audit
@@ -54,6 +56,7 @@ from cinder.volume import rpcapi
 CONF = cfg.CONF
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderApiCmd(test.TestCase):
     """Unit test cases for python modules under cinder/cmd."""
 
@@ -87,19 +90,21 @@ class TestCinderApiCmd(test.TestCase):
         launcher.wait.assert_called_once_with()
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderBackupCmd(test.TestCase):
 
     def setUp(self):
         super(TestCinderBackupCmd, self).setUp()
         sys.argv = ['cinder-backup']
 
+    @mock.patch('cinder.cmd.backup._launch_backup_process')
     @mock.patch('cinder.service.wait')
     @mock.patch('cinder.service.serve')
     @mock.patch('cinder.service.Service.create')
     @mock.patch('cinder.utils.monkey_patch')
     @mock.patch('oslo_log.log.setup')
     def test_main(self, log_setup, monkey_patch, service_create, service_serve,
-                  service_wait):
+                  service_wait, launch_mock):
         server = service_create.return_value
 
         cinder_backup.main()
@@ -109,11 +114,38 @@ class TestCinderBackupCmd(test.TestCase):
         log_setup.assert_called_once_with(CONF, "cinder")
         monkey_patch.assert_called_once_with()
         service_create.assert_called_once_with(binary='cinder-backup',
-                                               coordination=True)
+                                               coordination=True,
+                                               process_number=1)
         service_serve.assert_called_once_with(server)
         service_wait.assert_called_once_with()
+        launch_mock.assert_not_called()
+
+    @mock.patch('cinder.service.get_launcher')
+    @mock.patch('cinder.service.Service.create')
+    @mock.patch('cinder.utils.monkey_patch')
+    @mock.patch('oslo_log.log.setup')
+    def test_main_multiprocess(self, log_setup, monkey_patch, service_create,
+                               get_launcher):
+        CONF.set_override('backup_workers', 2)
+        cinder_backup.main()
+
+        self.assertEqual('cinder', CONF.project)
+        self.assertEqual(CONF.version, version.version_string())
+
+        c1 = mock.call(binary=constants.BACKUP_BINARY,
+                       coordination=True,
+                       process_number=1)
+        c2 = mock.call(binary=constants.BACKUP_BINARY,
+                       coordination=True,
+                       process_number=2)
+        service_create.assert_has_calls([c1, c2])
+
+        launcher = get_launcher.return_value
+        self.assertEqual(2, launcher.launch_service.call_count)
+        launcher.wait.assert_called_once_with()
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderSchedulerCmd(test.TestCase):
 
     def setUp(self):
@@ -140,6 +172,7 @@ class TestCinderSchedulerCmd(test.TestCase):
         service_wait.assert_called_once_with()
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderVolumeCmdPosix(test.TestCase):
 
     def setUp(self):
@@ -189,6 +222,7 @@ class TestCinderVolumeCmdPosix(test.TestCase):
 
 
 @ddt.ddt
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderVolumeCmdWin32(test.TestCase):
 
     def setUp(self):
@@ -318,6 +352,7 @@ class TestCinderVolumeCmdWin32(test.TestCase):
 
 
 @ddt.ddt
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderManageCmd(test.TestCase):
 
     def setUp(self):
@@ -329,12 +364,39 @@ class TestCinderManageCmd(test.TestCase):
         ex = self.assertRaises(SystemExit, db_cmds.purge, age_in_days)
         self.assertEqual(1, ex.code)
 
+    @mock.patch('cinder.objects.ServiceList.get_all')
     @mock.patch('cinder.db.migration.db_sync')
-    def test_db_commands_sync(self, db_sync):
+    def test_db_commands_sync(self, db_sync, service_get_mock):
         version = 11
         db_cmds = cinder_manage.DbCommands()
         db_cmds.sync(version=version)
         db_sync.assert_called_once_with(version)
+        service_get_mock.assert_not_called()
+
+    @mock.patch('cinder.objects.Service.save')
+    @mock.patch('cinder.objects.ServiceList.get_all')
+    @mock.patch('cinder.db.migration.db_sync')
+    def test_db_commands_sync_bump_versions(self, db_sync, service_get_mock,
+                                            service_save):
+        ctxt = context.get_admin_context()
+        services = [fake_service.fake_service_obj(ctxt,
+                                                  binary='cinder-' + binary,
+                                                  rpc_current_version='0.1',
+                                                  object_current_version='0.2')
+                    for binary in ('volume', 'scheduler', 'backup')]
+        service_get_mock.return_value = services
+
+        version = 11
+        db_cmds = cinder_manage.DbCommands()
+        db_cmds.sync(version=version, bump_versions=True)
+        db_sync.assert_called_once_with(version)
+
+        self.assertEqual(3, service_save.call_count)
+        for service in services:
+            self.assertEqual(cinder_manage.RPC_VERSIONS[service.binary],
+                             service.rpc_current_version)
+            self.assertEqual(cinder_manage.OVO_VERSION,
+                             service.object_current_version)
 
     @mock.patch('oslo_db.sqlalchemy.migration.db_version')
     def test_db_commands_version(self, db_version):
@@ -422,6 +484,16 @@ class TestCinderManageCmd(test.TestCase):
                                  -1)
         self.assertEqual(127, exit.code)
         cinder_manage.DbCommands.online_migrations[0].assert_not_called()
+
+    @mock.patch('cinder.db.reset_active_backend')
+    @mock.patch('cinder.context.get_admin_context')
+    def test_db_commands_reset_active_backend(self, admin_ctxt_mock,
+                                              reset_backend_mock):
+        db_cmds = cinder_manage.DbCommands()
+        db_cmds.reset_active_backend(True, 'fake-backend-id', 'fake-host')
+        reset_backend_mock.assert_called_with(admin_ctxt_mock.return_value,
+                                              True, 'fake-backend-id',
+                                              'fake-host')
 
     @mock.patch('cinder.version.version_string')
     def test_versions_commands_list(self, version_string):
@@ -1058,6 +1130,7 @@ class TestCinderManageCmd(test.TestCase):
         self.assertIsNone(service_commands.remove('abinary', 'ahost'))
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderRtstoolCmd(test.TestCase):
 
     def setUp(self):
@@ -1459,8 +1532,8 @@ class TestCinderRtstoolCmd(test.TestCase):
 
         regexp = (r'targetcli not installed and could not create default '
                   r'directory \(dirname\): error$')
-        self.assertRaisesRegexp(cinder_rtstool.RtstoolError, regexp,
-                                cinder_rtstool.save_to_file, None)
+        self.assertRaisesRegex(cinder_rtstool.RtstoolError, regexp,
+                               cinder_rtstool.save_to_file, None)
 
     @mock.patch.object(cinder_rtstool, 'os', autospec=True)
     @mock.patch.object(cinder_rtstool, 'rtslib_fb', autospec=True)
@@ -1468,8 +1541,8 @@ class TestCinderRtstoolCmd(test.TestCase):
         save = mock_rtslib.root.RTSRoot.return_value.save_to_file
         save.side_effect = OSError('error')
         regexp = r'Could not save configuration to myfile: error'
-        self.assertRaisesRegexp(cinder_rtstool.RtstoolError, regexp,
-                                cinder_rtstool.save_to_file, 'myfile')
+        self.assertRaisesRegex(cinder_rtstool.RtstoolError, regexp,
+                               cinder_rtstool.save_to_file, 'myfile')
 
     @mock.patch.object(cinder_rtstool, 'rtslib_fb',
                        **{'root.default_save_file': mock.sentinel.filename})
@@ -1652,6 +1725,7 @@ class TestCinderRtstoolCmd(test.TestCase):
         self.assertEqual(0, rc)
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestCinderVolumeUsageAuditCmd(test.TestCase):
 
     def setUp(self):
@@ -2100,6 +2174,7 @@ class TestCinderVolumeUsageAuditCmd(test.TestCase):
         ])
 
 
+@test.testtools.skipIf(sys.platform == 'darwin', 'Not supported on macOS')
 class TestVolumeSharedTargetsOnlineMigration(test.TestCase):
     """Unit tests for cinder.db.api.service_*."""
 

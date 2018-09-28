@@ -30,8 +30,10 @@ HOST_NAME = 'fake.host.name'
 BACKEND_NAME = 'fake_backend_name'
 POOL_NAME = 'aggr1'
 SHARE_IP = '192.168.99.24'
+IPV6_ADDRESS = 'fe80::6e40:8ff:fe8a:130'
 EXPORT_PATH = '/fake/export/path'
 NFS_SHARE = '%s:%s' % (SHARE_IP, EXPORT_PATH)
+NFS_SHARE_IPV6 = '[%s]:%s' % (IPV6_ADDRESS, EXPORT_PATH)
 HOST_STRING = '%s@%s#%s' % (HOST_NAME, BACKEND_NAME, POOL_NAME)
 NFS_HOST_STRING = '%s@%s#%s' % (HOST_NAME, BACKEND_NAME, NFS_SHARE)
 AGGREGATE = 'aggr1'
@@ -45,6 +47,8 @@ NFS_SHARE_PATH = '/export'
 NFS_EXPORT_1 = '%s:%s' % (NFS_HOST, NFS_SHARE_PATH)
 NFS_EXPORT_2 = 'nfs-host2:/export'
 MOUNT_POINT = '/mnt/nfs'
+ATTACHED = 'attached'
+DETACHED = 'detached'
 LUN_METADATA = {
     'OsType': None,
     'SpaceReserved': 'true',
@@ -57,6 +61,7 @@ VOLUME = {
     'size': SIZE,
     'id': VOLUME_ID,
     'host': HOST_STRING,
+    'attach_status': DETACHED,
 }
 NFS_VOLUME = {
     'name': NFS_FILE_PATH,
@@ -182,6 +187,15 @@ FC_TARGET_INFO_UNMAP = {'driver_volume_type': 'fibre_channel',
                         'data': {'target_wwn': FC_TARGET_WWPNS,
                                  'initiator_target_map': FC_I_T_MAP}}
 
+ISCSI_ONE_MAP_LIST = [{'initiator-group': 'openstack-faketgt1',
+                       'vserver': 'vserver_123', 'lun-id': '1'}]
+ISCSI_MULTI_MAP_LIST = [{'initiator-group': 'openstack-faketgt1',
+                        'vserver': 'vserver_123', 'lun-id': '1'},
+                        {'initiator-group': 'openstack-faketgt2',
+                         'vserver': 'vserver_123', 'lun-id': '2'}
+                        ]
+ISCSI_EMPTY_MAP_LIST = []
+
 IGROUP1_NAME = 'openstack-igroup1'
 
 IGROUP1 = {
@@ -230,9 +244,7 @@ ISCSI_TARGET_DETAILS_LIST = [
 ]
 
 IPV4_ADDRESS = '192.168.14.2'
-IPV6_ADDRESS = 'fe80::6e40:8ff:fe8a:130'
 NFS_SHARE_IPV4 = IPV4_ADDRESS + ':' + EXPORT_PATH
-NFS_SHARE_IPV6 = IPV6_ADDRESS + ':' + EXPORT_PATH
 
 RESERVED_PERCENTAGE = 7
 MAX_OVER_SUBSCRIPTION_RATIO = 19.0

@@ -1,4 +1,4 @@
-# Copyright (c) 2016 Dell Inc. or its subsidiaries.
+# Copyright (c) 2016 - 2018 Dell Inc. or its subsidiaries.
 # All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -38,7 +38,6 @@ else:
     # Set storops_ex to be None for unit test
     storops_ex = None
 
-
 LOG = logging.getLogger(__name__)
 
 PROTOCOL_FC = 'FC'
@@ -58,6 +57,8 @@ class VolumeParams(object):
                              else volume.display_name)
         self._pool = None
         self._io_limit_policy = None
+        self._is_thick = None
+        self._is_compressed = None
 
     @property
     def volume_id(self):
@@ -109,11 +110,36 @@ class VolumeParams(object):
     def io_limit_policy(self, value):
         self._io_limit_policy = value
 
+    @property
+    def is_thick(self):
+        if self._is_thick is None:
+            provision = utils.get_extra_spec(self._volume, 'provisioning:type')
+            support = utils.get_extra_spec(self._volume,
+                                           'thick_provisioning_support')
+            self._is_thick = (provision == 'thick' and support == '<is> True')
+        return self._is_thick
+
+    @property
+    def is_compressed(self):
+        if self._is_compressed is None:
+            provision = utils.get_extra_spec(self._volume, 'provisioning:type')
+            compression = utils.get_extra_spec(self._volume,
+                                               'compression_support')
+            if provision == 'compressed' and compression == '<is> True':
+                self._is_compressed = True
+        return self._is_compressed
+
+    @is_compressed.setter
+    def is_compressed(self, value):
+        self._is_compressed = value
+
     def __eq__(self, other):
         return (self.volume_id == other.volume_id and
                 self.name == other.name and
                 self.size == other.size and
-                self.io_limit_policy == other.io_limit_policy)
+                self.io_limit_policy == other.io_limit_policy and
+                self.is_thick == other.is_thick and
+                self.is_compressed == other.is_compressed)
 
 
 class CommonAdapter(object):
@@ -139,6 +165,8 @@ class CommonAdapter(object):
         self.storage_pools_map = None
         self._client = None
         self.allowed_ports = None
+        self.remove_empty_host = False
+        self.to_lock_host = False
 
     def do_setup(self, driver, conf):
         self.driver = driver
@@ -147,14 +175,13 @@ class CommonAdapter(object):
         self.reserved_percentage = self.config.reserved_percentage
         self.max_over_subscription_ratio = (
             self.config.max_over_subscription_ratio)
-        self.volume_backend_name = (
-            self.config.safe_get('volume_backend_name') or self.driver_name)
+        self.volume_backend_name = (self.config.safe_get('volume_backend_name')
+                                    or self.driver_name)
         self.ip = self.config.san_ip
         self.username = self.config.san_login
         self.password = self.config.san_password
-        # Unity currently not support to upload certificate.
-        # Once it supports, enable the verify.
-        self.array_cert_verify = False
+        # Allow for customized CA
+        self.array_cert_verify = self.config.driver_ssl_cert_verify
         self.array_ca_cert_path = self.config.driver_ssl_cert_path
 
         sys_version = self.client.system.system_version
@@ -166,6 +193,9 @@ class CommonAdapter(object):
         self.storage_pools_map = self.get_managed_pools()
 
         self.allowed_ports = self.validate_ports(self.config.unity_io_ports)
+
+        self.remove_empty_host = self.config.remove_empty_host
+        self.to_lock_host = self.remove_empty_host
 
         group_name = (self.config.config_group if self.config.config_group
                       else 'DEFAULT')
@@ -270,18 +300,24 @@ class CommonAdapter(object):
             'size': params.size,
             'description': params.description,
             'pool': params.pool,
-            'io_limit_policy': params.io_limit_policy}
+            'io_limit_policy': params.io_limit_policy,
+            'is_thick': params.is_thick,
+            'is_compressed': params.is_compressed
+        }
 
         LOG.info('Create Volume: %(name)s, size: %(size)s, description: '
                  '%(description)s, pool: %(pool)s, io limit policy: '
-                 '%(io_limit_policy)s.', log_params)
+                 '%(io_limit_policy)s, thick: %(is_thick)s, '
+                 '%(is_compressed)s.', log_params)
 
         return self.makeup_model(
             self.client.create_lun(name=params.name,
                                    size=params.size,
                                    pool=params.pool,
                                    description=params.description,
-                                   io_limit_policy=params.io_limit_policy))
+                                   io_limit_policy=params.io_limit_policy,
+                                   is_thin=False if params.is_thick else None,
+                                   is_compressed=params.is_compressed))
 
     def delete_volume(self, volume):
         lun_id = self.get_lun_id(volume)
@@ -292,11 +328,25 @@ class CommonAdapter(object):
         else:
             self.client.delete_lun(lun_id)
 
+    def _create_host_and_attach(self, host_name, lun_or_snap):
+        @utils.lock_if(self.to_lock_host, '{lock_name}')
+        def _lock_helper(lock_name):
+            if not self.to_lock_host:
+                host = self.client.create_host(host_name)
+            else:
+                # Use the lock in the decorator
+                host = self.client.create_host_wo_lock(host_name)
+            hlu = self.client.attach(host, lun_or_snap)
+            return host, hlu
+
+        return _lock_helper('{unity}-{host}'.format(unity=self.client.host,
+                                                    host=host_name))
+
     def _initialize_connection(self, lun_or_snap, connector, vol_id):
-        host = self.client.create_host(connector['host'])
+        host, hlu = self._create_host_and_attach(connector['host'],
+                                                 lun_or_snap)
         self.client.update_host_initiators(
             host, self.get_connector_uids(connector))
-        hlu = self.client.attach(host, lun_or_snap)
         data = self.get_connection_info(hlu, host, connector)
         data['target_discovered'] = True
         if vol_id is not None:
@@ -312,18 +362,60 @@ class CommonAdapter(object):
         lun = self.client.get_lun(lun_id=self.get_lun_id(volume))
         return self._initialize_connection(lun, connector, volume.id)
 
-    def _terminate_connection(self, lun_or_snap, connector):
+    @staticmethod
+    def filter_targets_by_host(host):
+        # No target info for iSCSI driver
+        return []
+
+    def _detach_and_delete_host(self, host_name, lun_or_snap,
+                                is_multiattach_to_host=False):
+        @utils.lock_if(self.to_lock_host, '{lock_name}')
+        def _lock_helper(lock_name):
+            # Only get the host from cache here
+            host = self.client.create_host_wo_lock(host_name)
+            if not is_multiattach_to_host:
+                self.client.detach(host, lun_or_snap)
+            host.update()  # need update to get the latest `host_luns`
+            targets = self.filter_targets_by_host(host)
+            if self.remove_empty_host and not host.host_luns:
+                self.client.delete_host_wo_lock(host)
+            return targets
+
+        return _lock_helper('{unity}-{host}'.format(unity=self.client.host,
+                                                    host=host_name))
+
+    @staticmethod
+    def get_terminate_connection_info(connector, targets):
+        # No return data from terminate_connection for iSCSI driver
+        return {}
+
+    def _terminate_connection(self, lun_or_snap, connector,
+                              is_multiattach_to_host=False):
         is_force_detach = connector is None
+        data = {}
         if is_force_detach:
             self.client.detach_all(lun_or_snap)
         else:
-            host = self.client.create_host(connector['host'])
-            self.client.detach(host, lun_or_snap)
+            targets = self._detach_and_delete_host(
+                connector['host'], lun_or_snap,
+                is_multiattach_to_host=is_multiattach_to_host)
+            data = self.get_terminate_connection_info(connector, targets)
+        return {
+            'driver_volume_type': self.driver_volume_type,
+            'data': data,
+        }
 
     @cinder_utils.trace
     def terminate_connection(self, volume, connector):
         lun = self.client.get_lun(lun_id=self.get_lun_id(volume))
-        return self._terminate_connection(lun, connector)
+        # None `connector` indicates force detach, then detach all even the
+        # volume is multi-attached.
+        multiattach_flag = (connector is not None and
+                            utils.is_multiattach_to_host(
+                                volume.volume_attachment,
+                                connector['host']))
+        return self._terminate_connection(
+            lun, connector, is_multiattach_to_host=multiattach_flag)
 
     def get_connector_uids(self, connector):
         return None
@@ -355,7 +447,7 @@ class CommonAdapter(object):
             'volume_backend_name': self.volume_backend_name,
             'storage_protocol': self.protocol,
             'thin_provisioning_support': True,
-            'thick_provisioning_support': False,
+            'thick_provisioning_support': True,
             'pools': self.get_pools_stats(),
         }
 
@@ -379,9 +471,12 @@ class CommonAdapter(object):
                               {'pool_name': pool.name,
                                'array_serial': self.serial_number}),
             'thin_provisioning_support': True,
-            'thick_provisioning_support': False,
+            'thick_provisioning_support': True,
+            'compression_support': pool.is_all_flash,
             'max_over_subscription_ratio': (
-                self.max_over_subscription_ratio)}
+                self.max_over_subscription_ratio),
+            'multiattach': True
+        }
 
     def get_lun_id(self, volume):
         """Retrieves id of the volume's backing LUN.
@@ -534,7 +629,9 @@ class CommonAdapter(object):
         dest_lun = self.client.create_lun(
             name=vol_params.name, size=vol_params.size, pool=vol_params.pool,
             description=vol_params.description,
-            io_limit_policy=vol_params.io_limit_policy)
+            io_limit_policy=vol_params.io_limit_policy,
+            is_thin=False if vol_params.is_thick else None,
+            is_compressed=vol_params.is_compressed)
         src_id = src_snap.get_id()
         try:
             conn_props = cinder_utils.brick_get_connector_properties()
@@ -602,6 +699,16 @@ class CommonAdapter(object):
             LOG.debug(
                 'Volume copied via dd because array OE is too old to support '
                 'thin clone api. source snap: %(src_snap)s, lun: %(src_lun)s.',
+                {'src_snap': src_snap.name,
+                 'src_lun': 'Unknown' if src_lun is None else src_lun.name})
+        except storops_ex.UnityThinCloneNotAllowedError:
+            # Thin clone not allowed on some resources,
+            # like thick luns and their snaps
+            lun = self._dd_copy(vol_params, src_snap, src_lun=src_lun)
+            LOG.debug(
+                'Volume copied via dd because source snap/lun is not allowed '
+                'to thin clone, i.e. it is thick. source snap: %(src_snap)s, '
+                'lun: %(src_lun)s.',
                 {'src_snap': src_snap.name,
                  'src_lun': 'Unknown' if src_lun is None else src_lun.name})
         return lun
@@ -743,24 +850,19 @@ class FCAdapter(CommonAdapter):
         data['target_lun'] = hlu
         return data
 
-    def _terminate_connection(self, lun_or_snap, connector):
+    def filter_targets_by_host(self, host):
+        if self.auto_zone_enabled and not host.host_luns:
+            return self.client.get_fc_target_info(
+                host=host, logged_in_only=False,
+                allowed_ports=self.allowed_ports)
+        return []
+
+    def get_terminate_connection_info(self, connector, targets):
         # For FC, terminate_connection needs to return data to zone manager
         # which would clean the zone based on the data.
-        super(FCAdapter, self)._terminate_connection(lun_or_snap, connector)
-
-        ret = None
-        if self.auto_zone_enabled:
-            ret = {
-                'driver_volume_type': self.driver_volume_type,
-                'data': {}
-            }
-            host = self.client.create_host(connector['host'])
-            if len(host.host_luns) == 0:
-                targets = self.client.get_fc_target_info(
-                    logged_in_only=True, allowed_ports=self.allowed_ports)
-                ret['data'] = self._get_fc_zone_info(connector['wwpns'],
-                                                     targets)
-        return ret
+        if targets:
+            return self._get_fc_zone_info(connector['wwpns'], targets)
+        return {}
 
     def _get_fc_zone_info(self, initiator_wwns, target_wwns):
         mapping = self.lookup_service.get_device_mapping_from_network(

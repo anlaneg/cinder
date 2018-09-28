@@ -263,7 +263,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
     # 3.1.0 - support adapter type change using retype
     # 3.2.0 - config option to disable lazy creation of backend volume
     # 3.3.0 - config option to specify datastore name regex
-    VERSION = '3.3.0'
+    # 3.4.0 - added NFS41 as a supported datastore type
+    VERSION = '3.4.0'
 
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "VMware_CI"
@@ -290,19 +291,10 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
     @property
     def volumeops(self):
-        if not self._volumeops:
-            max_objects = self.configuration.vmware_max_objects_retrieval
-            self._volumeops = volumeops.VMwareVolumeOps(self.session,
-                                                        max_objects)
         return self._volumeops
 
     @property
     def ds_sel(self):
-        if not self._ds_sel:
-            max_objects = self.configuration.vmware_max_objects_retrieval
-            self._ds_sel = hub.DatastoreSelector(self.volumeops,
-                                                 self.session,
-                                                 max_objects)
         return self._ds_sel
 
     def _validate_params(self):
@@ -334,7 +326,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                     'storage_protocol': 'vmdk',
                     'reserved_percentage': 0,
                     'total_capacity_gb': 'unknown',
-                    'free_capacity_gb': 'unknown'}
+                    'free_capacity_gb': 'unknown',
+                    'shared_targets': False}
             self._stats = data
         return self._stats
 
@@ -867,7 +860,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         tmp_image = tmp_images.get(context, image_id)
         if tmp_image:
             LOG.debug("Using temporary image.")
-            with open(tmp_image) as read_handle:
+            with open(tmp_image, 'rb') as read_handle:
                 image_transfer.download_file(read_handle,
                                              host_ip,
                                              port,
@@ -1272,7 +1265,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         LOG.info("Done copying image: %(id)s to volume: %(vol)s.",
                  {'id': image_id, 'vol': volume['name']})
 
-    def _extend_backing(self, backing, new_size_in_gb):
+    def _extend_backing(self, backing, new_size_in_gb, disk_type):
         """Extend volume backing's virtual disk.
 
         :param backing: volume backing
@@ -1280,8 +1273,9 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         """
         root_vmdk_path = self.volumeops.get_vmdk_path(backing)
         datacenter = self.volumeops.get_dc(backing)
+        eager_zero = disk_type == EAGER_ZEROED_THICK_VMDK_TYPE
         self.volumeops.extend_virtual_disk(new_size_in_gb, root_vmdk_path,
-                                           datacenter)
+                                           datacenter, eager_zero)
 
     def copy_image_to_volume(self, context, volume, image_service, image_id):
         """Creates volume from image.
@@ -1358,7 +1352,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                       {'name': volume['name'],
                        'vol_size': volume_size,
                        'disk_size': disk_size})
-            self._extend_backing(backing, volume['size'])
+            self._extend_backing(backing, volume['size'],
+                                 VMwareVcVmdkDriver._get_disk_type(volume))
         # TODO(vbala): handle volume_size < disk_size case.
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
@@ -1622,7 +1617,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
         # try extending vmdk in place
         try:
-            self._extend_backing(backing, new_size)
+            self._extend_backing(backing, new_size,
+                                 VMwareVcVmdkDriver._get_disk_type(volume))
             LOG.info("Successfully extended volume: %(vol)s to size: "
                      "%(size)s GB.",
                      {'vol': vol_name, 'size': new_size})
@@ -1645,7 +1641,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             self.volumeops.relocate_backing(backing, summary.datastore, rp,
                                             host)
             self.volumeops.move_backing_to_folder(backing, folder)
-            self._extend_backing(backing, new_size)
+            self._extend_backing(backing, new_size,
+                                 VMwareVcVmdkDriver._get_disk_type(volume))
         except exceptions.VMwareDriverException:
             with excutils.save_and_reraise_exception():
                 LOG.error("Failed to extend volume: %(vol)s to size: "
@@ -1730,6 +1727,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             profile_id,
             dest_path.get_descriptor_ds_file_path())
         self.volumeops.update_backing_disk_uuid(backing, volume['id'])
+        return backing
 
     def manage_existing(self, volume, existing_ref):
         """Brings an existing virtual disk under Cinder management.
@@ -1754,29 +1752,31 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
 
     @property
     def session(self):
-        if not self._session:
-            ip = self.configuration.vmware_host_ip
-            port = self.configuration.vmware_host_port
-            username = self.configuration.vmware_host_username
-            password = self.configuration.vmware_host_password
-            api_retry_count = self.configuration.vmware_api_retry_count
-            task_poll_interval = self.configuration.vmware_task_poll_interval
-            wsdl_loc = self.configuration.safe_get('vmware_wsdl_location')
-            pbm_wsdl = self.pbm_wsdl if hasattr(self, 'pbm_wsdl') else None
-            ca_file = self.configuration.vmware_ca_file
-            insecure = self.configuration.vmware_insecure
-            pool_size = self.configuration.vmware_connection_pool_size
-            self._session = api.VMwareAPISession(ip, username,
-                                                 password, api_retry_count,
-                                                 task_poll_interval,
-                                                 wsdl_loc=wsdl_loc,
-                                                 pbm_wsdl_loc=pbm_wsdl,
-                                                 port=port,
-                                                 cacert=ca_file,
-                                                 insecure=insecure,
-                                                 pool_size=pool_size,
-                                                 op_id_prefix='c-vol')
         return self._session
+
+    def _create_session(self):
+        ip = self.configuration.vmware_host_ip
+        port = self.configuration.vmware_host_port
+        username = self.configuration.vmware_host_username
+        password = self.configuration.vmware_host_password
+        api_retry_count = self.configuration.vmware_api_retry_count
+        task_poll_interval = self.configuration.vmware_task_poll_interval
+        wsdl_loc = self.configuration.safe_get('vmware_wsdl_location')
+        ca_file = self.configuration.vmware_ca_file
+        insecure = self.configuration.vmware_insecure
+        pool_size = self.configuration.vmware_connection_pool_size
+        session = api.VMwareAPISession(ip,
+                                       username,
+                                       password,
+                                       api_retry_count,
+                                       task_poll_interval,
+                                       wsdl_loc=wsdl_loc,
+                                       port=port,
+                                       cacert=ca_file,
+                                       insecure=insecure,
+                                       pool_size=pool_size,
+                                       op_id_prefix='c-vol')
+        return session
 
     def _get_vc_version(self):
         """Connect to vCenter server and fetch version.
@@ -1839,6 +1839,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                 raise exception.InvalidInput(reason=_(
                     "Invalid regular expression: %s.") % regex_pattern)
 
+        self._session = self._create_session()
+
         # Validate vCenter version.
         self._vc_version = self._get_vc_version()
         self._validate_vcenter_version(self._vc_version)
@@ -1848,19 +1850,16 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
                 versionutils.is_compatible(self.PBM_ENABLED_VC_VERSION,
                                            self._vc_version,
                                            same_major=False)):
-            self.pbm_wsdl = pbm.get_pbm_wsdl_location(self._vc_version)
-            if not self.pbm_wsdl:
+            pbm_wsdl_loc = pbm.get_pbm_wsdl_location(self._vc_version)
+            if not pbm_wsdl_loc:
                 LOG.error("Not able to configure PBM for vCenter server: %s",
                           self._vc_version)
                 raise exceptions.VMwareDriverException()
             self._storage_policy_enabled = True
-            # Destroy current session so that it is recreated with pbm enabled
-            self._session = None
+            self._session.pbm_wsdl_loc_set(pbm_wsdl_loc)
 
         self._register_extension()
 
-        # recreate session and initialize volumeops and ds_sel
-        # TODO(vbala) remove properties: session, volumeops and ds_sel
         max_objects = self.configuration.vmware_max_objects_retrieval
         self._volumeops = volumeops.VMwareVolumeOps(
             self.session, max_objects, EXTENSION_KEY, EXTENSION_TYPE)
@@ -2001,7 +2000,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         host = None
         rp = None
         folder = None
-        if not clone_type == volumeops.LINKED_CLONE_TYPE:
+        if clone_type != volumeops.LINKED_CLONE_TYPE:
             # Pick a datastore where to create the full clone under any host
             (host, rp, folder, summary) = self._select_ds_for_volume(volume)
             datastore = summary.datastore
@@ -2029,7 +2028,8 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
         # we need to extend/resize the capacity of the vmdk virtual disk from
         # the size of the source volume to the volume size.
         if volume['size'] > src_vsize:
-            self._extend_backing(clone, volume['size'])
+            self._extend_backing(clone, volume['size'],
+                                 VMwareVcVmdkDriver._get_disk_type(volume))
         LOG.info("Successfully created clone: %s.", clone)
 
     def _create_volume_from_template(self, volume, path):
@@ -2123,10 +2123,19 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             host=host, resource_pool=rp, folder=folder,
             disks_to_clone=[vol_dev_uuid])
 
+    def _extend_if_needed(self, volume, backing):
+        volume_size = volume.size * units.Gi
+        disk_size = self.volumeops.get_disk_size(backing)
+        if volume_size > disk_size:
+            self._extend_backing(backing, volume.size,
+                                 VMwareVcVmdkDriver._get_disk_type(volume))
+
     def _create_volume_from_temp_backing(self, volume, tmp_backing):
         try:
             disk_device = self.volumeops._get_disk_device(tmp_backing)
-            self._manage_existing_int(volume, tmp_backing, disk_device)
+            backing = self._manage_existing_int(
+                volume, tmp_backing, disk_device)
+            self._extend_if_needed(volume, backing)
         finally:
             self._delete_temp_backing(tmp_backing)
 
@@ -2209,7 +2218,7 @@ class VMwareVcVmdkDriver(driver.VolumeDriver):
             raise exception.InvalidSnapshot("Cannot revert to template "
                                             "based snapshot")
 
-        backing = self.volumeops.get_backing(volume.name)
+        backing = self.volumeops.get_backing(volume.name, volume.id)
         if not backing:
             LOG.debug("Backing does not exist for volume.", resource=volume)
         else:

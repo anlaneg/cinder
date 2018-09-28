@@ -178,7 +178,7 @@ class TestClient(test.TestCase):
 
     @res_mock.patch_client
     def test_delete_smp(self, client, mocked):
-        client.delete_lun(mocked['lun'].name)
+        client.delete_lun(mocked['lun'].name, snap_copy='snap-as-vol')
 
     @res_mock.patch_client
     def test_delete_lun_not_exist(self, client, mocked):
@@ -186,9 +186,9 @@ class TestClient(test.TestCase):
 
     @res_mock.patch_client
     def test_delete_lun_exception(self, client, mocked):
-        self.assertRaisesRegexp(storops_ex.VNXDeleteLunError,
-                                'General lun delete error.',
-                                client.delete_lun, mocked['lun'].name)
+        self.assertRaisesRegex(storops_ex.VNXDeleteLunError,
+                               'General lun delete error.',
+                               client.delete_lun, mocked['lun'].name)
 
     @res_mock.patch_client
     def test_cleanup_async_lun(self, client, mocked):
@@ -310,6 +310,10 @@ class TestClient(test.TestCase):
         client.modify_snapshot('snap_name', True, True)
 
     @res_mock.patch_client
+    def test_restore_snapshot(self, client, mocked):
+        client.restore_snapshot('lun-id', 'snap_name')
+
+    @res_mock.patch_client
     def test_create_cg_snapshot(self, client, mocked):
         snap = client.create_cg_snapshot('cg_snap_name', 'cg_name')
         self.assertIsNotNone(snap)
@@ -370,12 +374,12 @@ class TestClient(test.TestCase):
 
     @res_mock.patch_client
     def test_add_lun_to_sg_alu_in_use(self, client, mocked):
-        self.assertRaisesRegexp(storops_ex.VNXNoHluAvailableError,
-                                'No HLU available.',
-                                client.add_lun_to_sg,
-                                mocked['sg'],
-                                mocked['lun'],
-                                3)
+        self.assertRaisesRegex(storops_ex.VNXNoHluAvailableError,
+                               'No HLU available.',
+                               client.add_lun_to_sg,
+                               mocked['sg'],
+                               mocked['lun'],
+                               3)
 
     @res_mock.patch_client
     def test_update_consistencygroup_no_lun_in_cg(self, client, mocked):
@@ -572,3 +576,9 @@ class TestClient(test.TestCase):
     @res_mock.patch_client
     def test_add_lun_to_ioclass(self, client, mocked):
         client.add_lun_to_ioclass('test_ioclass', 1)
+
+    @res_mock.patch_client
+    def test_set_max_luns_per_sg(self, client, mocked):
+        with utils.patch_vnxstoragegroup as patch_sg:
+            client.set_max_luns_per_sg(300)
+            patch_sg.set_max_luns_per_sg.assert_called_with(300)

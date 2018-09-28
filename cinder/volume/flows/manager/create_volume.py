@@ -10,13 +10,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import os
 import traceback
 
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from oslo_utils import fileutils
 from oslo_utils import timeutils
 import taskflow.engines
 from taskflow.patterns import linear_flow
@@ -98,6 +98,8 @@ class OnFailureRescheduleTask(flow_utils.CinderTask):
             exception.VolumeTypeNotFound,
             exception.ImageUnacceptable,
             exception.ImageTooBig,
+            exception.InvalidSignatureImage,
+            exception.ImageSignatureVerificationException
         ]
 
     def execute(self, **kwargs):
@@ -510,9 +512,7 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                   {'image_id': image_id, 'volume_id': volume.id,
                    'image_location': image_location})
         try:
-            image_properties = image_meta.get('properties', {})
-            image_encryption_key = image_properties.get(
-                'cinder_encryption_key_id')
+            image_encryption_key = image_meta.get('cinder_encryption_key_id')
 
             if volume.encryption_key_id and image_encryption_key:
                 # If the image provided an encryption key, we have
@@ -718,17 +718,52 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
         return None, False
 
     @coordination.synchronized('{image_id}')
+    def _prepare_image_cache_entry(self, context, volume,
+                                   image_location, image_id,
+                                   image_meta, image_service):
+        internal_context = cinder_context.get_internal_tenant_context()
+        if not internal_context:
+            return None, False
+
+        cache_entry = self.image_volume_cache.get_entry(internal_context,
+                                                        volume,
+                                                        image_id,
+                                                        image_meta)
+
+        # If the entry is in the cache then return ASAP in order to minimize
+        # the scope of the lock. If it isn't in the cache then do the work
+        # that adds it. The work is done inside the locked region to ensure
+        # only one cache entry is created.
+        if cache_entry:
+            LOG.debug('Found cache entry for image = '
+                      '%(image_id)s on host %(host)s.',
+                      {'image_id': image_id, 'host': volume.host})
+            return None, False
+        else:
+            LOG.debug('Preparing cache entry for image = '
+                      '%(image_id)s on host %(host)s.',
+                      {'image_id': image_id, 'host': volume.host})
+            model_update = self._create_from_image_cache_or_download(
+                context,
+                volume,
+                image_location,
+                image_id,
+                image_meta,
+                image_service,
+                update_cache=True)
+            return model_update, True
+
     def _create_from_image_cache_or_download(self, context, volume,
                                              image_location, image_id,
-                                             image_meta, image_service):
+                                             image_meta, image_service,
+                                             update_cache=False):
         # NOTE(e0ne): check for free space in image_conversion_dir before
         # image downloading.
         # NOTE(mnaser): This check *only* happens if the backend is not able
         #               to clone volumes and we have to resort to downloading
         #               the image from Glance and uploading it.
-        if (CONF.image_conversion_dir and not
-                os.path.exists(CONF.image_conversion_dir)):
-            os.makedirs(CONF.image_conversion_dir)
+        if CONF.image_conversion_dir:
+            fileutils.ensure_tree(CONF.image_conversion_dir)
         try:
             image_utils.check_available_space(
                 CONF.image_conversion_dir,
@@ -759,8 +794,8 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                     image_id,
                     image_meta
                 )
-                # Don't cache encrypted volume.
-                if not cloned and not volume.encryption_key_id:
+                # Don't cache unless directed.
+                if not cloned and update_cache:
                     should_create_cache_entry = True
                     # cleanup consistencygroup field in the volume,
                     # because when creating cache entry, it will need
@@ -777,6 +812,17 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                     with image_utils.TemporaryImages.fetch(
                             image_service, context, image_id,
                             backend_name) as tmp_image:
+                        if CONF.verify_glance_signatures != 'disabled':
+                            # Verify image signature via reading content from
+                            # temp image, and store the verification flag if
+                            # required.
+                            verified = \
+                                image_utils.verify_glance_image_signature(
+                                    context, image_service,
+                                    image_id, tmp_image)
+                            self.db.volume_glance_metadata_bulk_create(
+                                context, volume.id,
+                                {'signature_verified': verified})
                         # Try to create the volume as the minimal size,
                         # then we can extend once the image has been
                         # downloaded.
@@ -805,6 +851,15 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                             detail=
                             message_field.Detail.NOT_ENOUGH_SPACE_FOR_IMAGE,
                             exception=e)
+                except exception.ImageSignatureVerificationException as err:
+                    with excutils.save_and_reraise_exception():
+                        self.message.create(
+                            context,
+                            message_field.Action.COPY_IMAGE_TO_VOLUME,
+                            resource_uuid=volume.id,
+                            detail=
+                            message_field.Detail.SIGNATURE_VERIFICATION_FAILED,
+                            exception=err)
 
             if should_create_cache_entry:
                 # Update the newly created volume db entry before we clone it
@@ -870,6 +925,21 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                                                             image_location,
                                                             image_meta)
 
+        # If we're going to try using the image cache then prepare the cache
+        # entry. Note: encrypted volume images are not cached.
+        if not cloned and self.image_volume_cache and not volume_is_encrypted:
+            # If _prepare_image_cache_entry() has to create the cache entry
+            # then it will also create the volume. But if the volume image
+            # is already in the cache then it returns (None, False), and
+            # _create_from_image_cache_or_download() will use the cache.
+            model_update, cloned = self._prepare_image_cache_entry(
+                context,
+                volume,
+                image_location,
+                image_id,
+                image_meta,
+                image_service)
+
         # Try and use the image cache, and download if not cached.
         if not cloned:
             model_update = self._create_from_image_cache_or_download(
@@ -902,7 +972,6 @@ class CreateVolumeFromSpecTask(flow_utils.CinderTask):
                      "backup service to restore the volume with backup.",
                      {'id': backup_id})
             model_update = self._create_raw_volume(volume, **kwargs) or {}
-            model_update.update({'status': 'restoring-backup'})
             volume.update(model_update)
             volume.save()
 

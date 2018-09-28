@@ -48,6 +48,8 @@ class MockResource(object):
         self.pool_name = 'Pool0'
         self._storage_resource = None
         self.host_cache = []
+        self.is_thin = None
+        self.is_all_flash = True
 
     @property
     def id(self):
@@ -63,6 +65,8 @@ class MockResource(object):
             raise ex.UnityResourceNotFoundError()
         elif self.get_id() == 'snap_in_use':
             raise ex.UnityDeleteAttachedSnapError()
+        elif self.name == 'empty_host':
+            raise ex.HostDeleteIsCalled()
 
     @property
     def pool(self):
@@ -109,13 +113,16 @@ class MockResource(object):
         return self.alu_hlu_map.get(lun.get_id(), None)
 
     @staticmethod
-    def create_lun(lun_name, size_gb, description=None, io_limit_policy=None):
+    def create_lun(lun_name, size_gb, description=None, io_limit_policy=None,
+                   is_thin=None, is_compression=None):
         if lun_name == 'in_use':
             raise ex.UnityLunNameInUseError()
         ret = MockResource(lun_name, 'lun_2')
         if io_limit_policy is not None:
             ret.max_iops = io_limit_policy.max_iops
             ret.max_kbps = io_limit_policy.max_kbps
+        if is_thin is not None:
+            ret.is_thin = is_thin
         return ret
 
     @staticmethod
@@ -161,6 +168,8 @@ class MockResource(object):
 
     @property
     def host_luns(self):
+        if self.name == 'host-no-host_luns':
+            return None
         return []
 
     @property
@@ -335,6 +344,13 @@ class ClientTest(unittest.TestCase):
         limit.max_kbps = 100
         lun = self.client.create_lun('LUN 4', 6, pool, io_limit_policy=limit)
         self.assertEqual(100, lun.max_kbps)
+
+    def test_create_lun_thick(self):
+        name = 'thick_lun'
+        pool = MockResource('Pool 0')
+        lun = self.client.create_lun(name, 6, pool, is_thin=False)
+        self.assertIsNotNone(lun.is_thin)
+        self.assertFalse(lun.is_thin)
 
     def test_thin_clone_success(self):
         name = 'tc_77'
@@ -543,3 +559,15 @@ class ClientTest(unittest.TestCase):
     def test_restore_snapshot(self):
         back_snap = self.client.restore_snapshot('snap1')
         self.assertEqual("internal_snap", back_snap.name)
+
+    def test_delete_host_wo_lock(self):
+        host = MockResource(name='empty-host')
+        self.client.host_cache['empty-host'] = host
+        self.assertRaises(ex.HostDeleteIsCalled,
+                          self.client.delete_host_wo_lock(host))
+
+    def test_delete_host_wo_lock_remove_from_cache(self):
+        host = MockResource(name='empty-host-in-cache')
+        self.client.host_cache['empty-host-in-cache'] = host
+        self.client.delete_host_wo_lock(host)
+        self.assertNotIn(host.name, self.client.host_cache)

@@ -14,7 +14,7 @@ Accept volume transfer
 Accepts a volume transfer.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -27,6 +27,7 @@ Request
 .. rest_parameters:: parameters.yaml
 
    - auth_key: auth_key
+   - transfer: transfer
    - transfer_id: transfer_id
    - project_id: project_id_path
 
@@ -60,8 +61,14 @@ Create volume transfer
 
 Creates a volume transfer.
 
+**Preconditions**
+
+* The volume ``status`` must be ``available``
+* Transferring encrypted volumes is not supported
+* If the volume has snapshots, those snapshots must be ``available``
+
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -72,6 +79,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
+   - project_id: project_id_path
+   - transfer: transfer
    - name: name
    - volume_id: volume_id
    - project_id: project_id_path
@@ -110,7 +119,7 @@ List volume transfers
 Lists volume transfers.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -151,7 +160,7 @@ Show volume transfer details
 Shows details for a volume transfer.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -193,7 +202,7 @@ Delete volume transfer
 Deletes a volume transfer.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -216,7 +225,7 @@ List volume transfers, with details
 Lists volume transfers, with details.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 

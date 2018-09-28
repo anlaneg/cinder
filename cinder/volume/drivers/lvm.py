@@ -53,7 +53,9 @@ volume_opts = [
                     'this requires lvm_mirrors + 2 PVs with available space'),
     cfg.StrOpt('lvm_type',
                default='auto',
-               choices=['default', 'thin', 'auto'],
+               choices=[('default', 'Thick-provisioned LVM.'),
+                        ('thin', 'Thin-provisioned LVM.'),
+                        ('auto', 'Defaults to thin when supported.')],
                help='Type of LVM volumes to deploy; (default, thin, or auto). '
                     'Auto defaults to thin if thin is supported.'),
     cfg.StrOpt('lvm_conf_file',
@@ -62,18 +64,6 @@ volume_opts = [
                     'this setting is ignored if the specified file does '
                     'not exist (You can also specify \'None\' to not use '
                     'a conf file even if one exists).'),
-    cfg.FloatOpt('lvm_max_over_subscription_ratio',
-                 # This option exists to provide a default value for the
-                 # LVM driver which is different than the global default.
-                 deprecated_for_removal=True,
-                 deprecated_since="12.0.0",
-                 deprecated_reason='Oversubscription ratio should now be '
-                                   'set using the common max_over_subscription'
-                                   '_ratio config option instead.',
-                 default=None,
-                 help='max_over_subscription_ratio setting for the LVM '
-                      'driver. If set to None (the default), the general max_'
-                      'over_subscription_ratio is used.'),
     cfg.BoolOpt('lvm_suppress_fd_warnings',
                 default=False,
                 help='Suppress leaked file descriptor warnings in LVM '
@@ -121,10 +111,6 @@ class LVMVolumeDriver(driver.VolumeDriver):
             executor=self._execute)
         self.protocol = self.target_driver.protocol
         self._sparse_copy_volume = False
-
-        if self.configuration.lvm_max_over_subscription_ratio is not None:
-            self.configuration.max_over_subscription_ratio = \
-                self.configuration.lvm_max_over_subscription_ratio
 
     def _sizestr(self, size_in_g):
         return '%sg' % size_in_g
@@ -258,6 +244,10 @@ class LVMVolumeDriver(driver.VolumeDriver):
         # This includes volumes and snapshots.
         total_volumes = len(self.vg.get_volumes())
 
+        supports_multiattach = True
+        if self.configuration.target_helper == 'lioadm':
+            supports_multiattach = False
+
         # Skip enabled_pools setting, treat the whole backend as one pool
         # XXX FIXME if multipool support is added to LVM driver.
         single_pool = {}
@@ -276,7 +266,7 @@ class LVMVolumeDriver(driver.VolumeDriver):
             total_volumes=total_volumes,
             filter_function=self.get_filter_function(),
             goodness_function=self.get_goodness_function(),
-            multiattach=True,
+            multiattach=supports_multiattach,
             backend_state='up'
         ))
         data["pools"].append(single_pool)

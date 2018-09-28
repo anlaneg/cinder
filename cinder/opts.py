@@ -23,25 +23,26 @@
 
 import itertools
 
+from keystoneauth1 import loading
+
 from cinder import objects
 objects.register_all()
 
 from cinder.api import common as cinder_api_common
-from cinder.api.contrib import types_extra_specs as \
-    cinder_api_contrib_typesextraspecs
 from cinder.api.middleware import auth as cinder_api_middleware_auth
 from cinder.api.views import versions as cinder_api_views_versions
 from cinder.backup import api as cinder_backup_api
 from cinder.backup import chunkeddriver as cinder_backup_chunkeddriver
 from cinder.backup import driver as cinder_backup_driver
 from cinder.backup.drivers import ceph as cinder_backup_drivers_ceph
+from cinder.backup.drivers import gcs as cinder_backup_drivers_gcs
 from cinder.backup.drivers import glusterfs as cinder_backup_drivers_glusterfs
-from cinder.backup.drivers import google as cinder_backup_drivers_google
 from cinder.backup.drivers import nfs as cinder_backup_drivers_nfs
 from cinder.backup.drivers import posix as cinder_backup_drivers_posix
 from cinder.backup.drivers import swift as cinder_backup_drivers_swift
 from cinder.backup.drivers import tsm as cinder_backup_drivers_tsm
 from cinder.backup import manager as cinder_backup_manager
+from cinder.cmd import backup as cinder_cmd_backup
 from cinder.cmd import volume as cinder_cmd_volume
 from cinder.common import config as cinder_common_config
 import cinder.compute
@@ -70,10 +71,6 @@ from cinder import ssh_utils as cinder_sshutils
 from cinder.transfer import api as cinder_transfer_api
 from cinder.volume import api as cinder_volume_api
 from cinder.volume import driver as cinder_volume_driver
-from cinder.volume.drivers.coprhd import common as \
-    cinder_volume_drivers_coprhd_common
-from cinder.volume.drivers.coprhd import scaleio as \
-    cinder_volume_drivers_coprhd_scaleio
 from cinder.volume.drivers.datacore import driver as \
     cinder_volume_drivers_datacore_driver
 from cinder.volume.drivers.datacore import iscsi as \
@@ -111,8 +108,6 @@ from cinder.volume.drivers.huawei import huawei_driver as \
     cinder_volume_drivers_huawei_huaweidriver
 from cinder.volume.drivers.ibm import flashsystem_common as \
     cinder_volume_drivers_ibm_flashsystemcommon
-from cinder.volume.drivers.ibm import flashsystem_fc as \
-    cinder_volume_drivers_ibm_flashsystemfc
 from cinder.volume.drivers.ibm import flashsystem_iscsi as \
     cinder_volume_drivers_ibm_flashsystemiscsi
 from cinder.volume.drivers.ibm import gpfs as cinder_volume_drivers_ibm_gpfs
@@ -158,6 +153,8 @@ from cinder.volume.drivers import storpool as cinder_volume_drivers_storpool
 from cinder.volume.drivers.synology import synology_common as \
     cinder_volume_drivers_synology_synologycommon
 from cinder.volume.drivers import tintri as cinder_volume_drivers_tintri
+from cinder.volume.drivers.veritas_access import veritas_iscsi as \
+    cinder_volume_drivers_veritas_access_veritasiscsi
 from cinder.volume.drivers.vmware import vmdk as \
     cinder_volume_drivers_vmware_vmdk
 from cinder.volume.drivers import vzstorage as cinder_volume_drivers_vzstorage
@@ -207,20 +204,20 @@ def list_opts():
         ('DEFAULT',
             itertools.chain(
                 cinder_api_common.api_common_opts,
-                cinder_api_contrib_typesextraspecs.extraspec_opts,
                 [cinder_api_middleware_auth.use_forwarded_for_opt],
                 cinder_api_views_versions.versions_opts,
                 cinder_backup_api.backup_api_opts,
                 cinder_backup_chunkeddriver.chunkedbackup_service_opts,
                 cinder_backup_driver.service_opts,
                 cinder_backup_drivers_ceph.service_opts,
+                cinder_backup_drivers_gcs.gcsbackup_service_opts,
                 cinder_backup_drivers_glusterfs.glusterfsbackup_service_opts,
-                cinder_backup_drivers_google.gcsbackup_service_opts,
                 cinder_backup_drivers_nfs.nfsbackup_service_opts,
                 cinder_backup_drivers_posix.posixbackup_service_opts,
                 cinder_backup_drivers_swift.swiftbackup_service_opts,
                 cinder_backup_drivers_tsm.tsm_opts,
                 cinder_backup_manager.backup_manager_opts,
+                [cinder_cmd_backup.backup_workers_opt],
                 [cinder_cmd_volume.cluster_opt],
                 cinder_common_config.core_opts,
                 cinder_common_config.global_opts,
@@ -250,6 +247,7 @@ def list_opts():
                 [cinder_volume_api.az_cache_time_opt],
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
+                cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_datacore_driver.datacore_opts,
                 cinder_volume_drivers_datacore_iscsi.datacore_iscsi_opts,
                 cinder_volume_drivers_inspur_instorage_instoragecommon.
@@ -257,6 +255,7 @@ def list_opts():
                 cinder_volume_drivers_inspur_instorage_instorageiscsi.
                 instorage_mcs_iscsi_opts,
                 cinder_volume_drivers_storpool.storpool_opts,
+                cinder_volume_drivers_veritas_access_veritasiscsi.VA_VOL_OPTS,
                 cinder_volume_manager.volume_manager_opts,
                 cinder_wsgi_eventletserver.socket_opts,
             )),
@@ -273,13 +272,13 @@ def list_opts():
         ('service_user',
             itertools.chain(
                 cinder_serviceauth.service_user_opts,
+                loading.get_session_conf_options(),
             )),
         ('backend_defaults',
             itertools.chain(
                 cinder_volume_driver.volume_opts,
                 cinder_volume_driver.iser_opts,
-                cinder_volume_drivers_coprhd_common.volume_opts,
-                cinder_volume_drivers_coprhd_scaleio.scaleio_opts,
+                cinder_volume_driver.nvmet_opts,
                 cinder_volume_drivers_datera_dateraiscsi.d_opts,
                 cinder_volume_drivers_dell_emc_ps.eqlx_opts,
                 cinder_volume_drivers_dell_emc_sc_storagecentercommon.
@@ -299,7 +298,6 @@ def list_opts():
                 cinder_volume_drivers_hpe_hpelefthandiscsi.hpelefthand_opts,
                 cinder_volume_drivers_huawei_huaweidriver.huawei_opts,
                 cinder_volume_drivers_ibm_flashsystemcommon.flashsystem_opts,
-                cinder_volume_drivers_ibm_flashsystemfc.flashsystem_fc_opts,
                 cinder_volume_drivers_ibm_flashsystemiscsi.
                 flashsystem_iscsi_opts,
                 cinder_volume_drivers_ibm_gpfs.gpfs_opts,
@@ -329,6 +327,7 @@ def list_opts():
                 cinder_volume_drivers_netapp_options.netapp_nfs_extra_opts,
                 cinder_volume_drivers_netapp_options.netapp_san_opts,
                 cinder_volume_drivers_netapp_options.netapp_replication_opts,
+                cinder_volume_drivers_netapp_options.netapp_support_opts,
                 cinder_volume_drivers_nexenta_options.NEXENTA_CONNECTION_OPTS,
                 cinder_volume_drivers_nexenta_options.NEXENTA_ISCSI_OPTS,
                 cinder_volume_drivers_nexenta_options.NEXENTA_DATASET_OPTS,

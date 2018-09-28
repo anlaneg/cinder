@@ -95,9 +95,19 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
               - Support for manage/unmanage snapshots
                 (vmax-manage-unmanage-snapshot)
               - Support for revert to volume snapshot
+        3.2.0 - Support for retyping replicated volumes (bp
+                vmax-retype-replicated-volumes)
+              - Support for multiattach volumes (bp vmax-allow-multi-attach)
+              - Support for list manageable volumes and snapshots
+                (bp/vmax-list-manage-existing)
+              - Fix for SSL verification/cert application (bug #1772924)
+              - Log VMAX metadata of a volume (bp vmax-metadata)
+              - Fix for get-pools command (bug #1784856)
+        3.3.0 - Fix for initiator retrieval and short hostname unmapping
+                (bugs #1783855 #1783867)
     """
 
-    VERSION = "3.1.0"
+    VERSION = "3.3.0"
 
     # ThirdPartySystems wiki
     CI_WIKI_NAME = "EMC_VMAX_CI"
@@ -263,7 +273,8 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
             exception_message = (_("Cannot get iSCSI ipaddresses, multipath "
                                    "flag, or hostlunid. Exception is %(e)s.")
                                  % {'e': six.text_type(e)})
-            raise exception.VolumeBackendAPIException(data=exception_message)
+            raise exception.VolumeBackendAPIException(
+                message=exception_message)
 
         if device_info.get('metro_ip_and_iqn'):
             LOG.debug("Volume is Metro device...")
@@ -436,6 +447,40 @@ class VMAXISCSIDriver(san.SanISCSIDriver):
         :param snapshot: the snapshot object
         """
         self.common.unmanage_snapshot(snapshot)
+
+    def get_manageable_volumes(self, cinder_volumes, marker, limit, offset,
+                               sort_keys, sort_dirs):
+        """Lists all manageable volumes.
+
+        :param cinder_volumes: List of currently managed Cinder volumes.
+                               Unused in driver.
+        :param marker: Begin returning volumes that appear later in the volume
+                       list than that represented by this reference.
+        :param limit: Maximum number of volumes to return. Default=1000.
+        :param offset: Number of volumes to skip after marker.
+        :param sort_keys: Results sort key. Valid keys: size, reference.
+        :param sort_dirs: Results sort direction. Valid dirs: asc, desc.
+        :return: List of dicts containing all manageable volumes.
+        """
+        return self.common.get_manageable_volumes(marker, limit, offset,
+                                                  sort_keys, sort_dirs)
+
+    def get_manageable_snapshots(self, cinder_snapshots, marker, limit, offset,
+                                 sort_keys, sort_dirs):
+        """Lists all manageable snapshots.
+
+        :param cinder_snapshots: List of currently managed Cinder snapshots.
+                                 Unused in driver.
+        :param marker: Begin returning volumes that appear later in the
+                       snapshot list than that represented by this reference.
+        :param limit: Maximum number of snapshots to return. Default=1000.
+        :param offset: Number of snapshots to skip after marker.
+        :param sort_keys: Results sort key. Valid keys: size, reference.
+        :param sort_dirs: Results sort direction. Valid dirs: asc, desc.
+        :return: List of dicts containing all manageable snapshots.
+        """
+        return self.common.get_manageable_snapshots(marker, limit, offset,
+                                                    sort_keys, sort_dirs)
 
     def retype(self, ctxt, volume, new_type, diff, host):
         """Migrate volume to another host using retype.

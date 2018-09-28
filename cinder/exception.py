@@ -111,6 +111,11 @@ class CinderException(Exception):
         # overshadowed by the class' message attribute
         self.msg = message
         super(CinderException, self).__init__(message)
+        # Oslo.messaging use the argument 'message' to rebuild exception
+        # directly at the rpc client side, therefore we should not use it
+        # in our keyword arguments, otherwise, the rebuild process will fail
+        # with duplicate keyword exception.
+        self.kwargs.pop('message', None)
 
     def _log_exception(self):
         # kwargs doesn't match a variable in the message
@@ -141,7 +146,7 @@ class VolumeDriverException(CinderException):
 
 
 class BackupDriverException(CinderException):
-    message = _("Backup driver reported an error: %(message)s")
+    message = _("Backup driver reported an error: %(reason)s")
 
 
 class BackupRestoreCancel(CinderException):
@@ -205,6 +210,10 @@ class InvalidInput(Invalid):
 
 class InvalidAvailabilityZone(Invalid):
     message = _("Availability zone '%(az)s' is invalid.")
+
+
+class InvalidTypeAvailabilityZones(Invalid):
+    message = _("Volume type's availability zones are invalid %(az)s.")
 
 
 class InvalidVolumeType(Invalid):
@@ -433,6 +442,15 @@ class ISCSITargetNotFoundForVolume(NotFound):
 
 class InvalidImageRef(Invalid):
     message = _("Invalid image href %(image_href)s.")
+
+
+class InvalidSignatureImage(Invalid):
+    message = _("Signature metadata is incomplete for image: "
+                "%(image_id)s.")
+
+
+class ImageSignatureVerificationException(CinderException):
+    message = _("Failed to verify image signature, reason: %(reason)s.")
 
 
 class ImageNotFound(NotFound):
@@ -1160,7 +1178,7 @@ class BadHTTPResponseStatus(VolumeDriverException):
 
 
 class BadResetResourceStatus(CinderException):
-    message = _("Bad reset resource status : %(message)s")
+    message = _("Bad reset resource status : %(reason)s")
 
 
 # ZADARA STORAGE VPSA driver exception
@@ -1267,7 +1285,7 @@ class NotSupportedOperation(Invalid):
 
 # NexentaStor driver exception
 class NexentaException(VolumeDriverException):
-    message = "%(message)s"
+    message = "%(reason)s"
 
 
 # Google Cloud Storage(GCS) backup driver
@@ -1316,7 +1334,7 @@ class InvalidAttachment(Invalid):
 
 # Veritas driver
 class UnableToExecuteHyperScaleCmd(VolumeDriverException):
-    message = _("Failed HyperScale command for '%(message)s'")
+    message = _("Failed HyperScale command for '%(command)s'")
 
 
 class UnableToProcessHyperScaleCmdOutput(VolumeDriverException):
@@ -1349,3 +1367,17 @@ class ServiceUserTokenNoAuth(CinderException):
     message = _("The [service_user] send_service_user_token option was "
                 "requested, but no service auth could be loaded. Please check "
                 "the [service_user] configuration section.")
+
+
+class UnsupportedNVMETProtocol(Invalid):
+    message = _("An invalid 'target_protocol' "
+                "value was provided: %(protocol)s")
+
+
+# NVMET driver
+class NVMETTargetAddError(CinderException):
+    message = "Failed to add subsystem: %(subsystem)s"
+
+
+class NVMETTargetDeleteError(CinderException):
+    message = "Failed to delete subsystem: %(subsystem)s"

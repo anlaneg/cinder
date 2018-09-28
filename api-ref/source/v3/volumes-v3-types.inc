@@ -25,7 +25,7 @@ Update a volume type
 Updates a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -78,7 +78,7 @@ Adds new extra specifications to a volume type, or updates the extra
 specifications that are assigned to a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -124,7 +124,7 @@ Show all extra specifications for volume type
 Shows all extra specifications assigned to a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -162,7 +162,7 @@ Show extra specification for volume type
 Shows the specific extra specification assigned to a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -193,7 +193,7 @@ Update extra specification for volume type
 Update the specific extra specification assigned to a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -231,7 +231,7 @@ Delete extra specification for volume type
 Deletes the specific extra specification assigned to a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -256,7 +256,7 @@ Show volume type detail
 Shows details for a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -267,8 +267,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
 
 
 Response Parameters
@@ -281,6 +281,7 @@ Response Parameters
    - extra_specs: extra_specs_volume_type_required
    - description: description_volume_type_required
    - name: name_volume_type_required
+   - id: volume_type_id_body
 
 
 Response Example
@@ -298,7 +299,7 @@ Show default volume type
 Shows details for the default volume type if configured.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -339,7 +340,7 @@ Delete a volume type
 Deletes a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -351,8 +352,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
 
 
 List all volume types
@@ -363,7 +364,7 @@ List all volume types
 Lists volume types.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -390,6 +391,11 @@ Response Parameters
    - volume_types: volume_types
    - extra_specs: extra_specs_volume_type_required
    - name: name_volume_type_required
+   - is_public: is_public_volume_type_required
+   - description: description_volume_type_required
+   - id: volume_type_id_body
+   - os-volume-type-access:is_public: is_public_volume_type_required
+   - qos_specs_id: qos_specs_id
 
 Response Example
 ----------------
@@ -406,7 +412,7 @@ Create a volume type
 Creates a volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -418,8 +424,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type: volume_type_1
    - project_id: project_id_path
+   - volume_type: volume_type_1
    - name: name_volume_type_required
    - os-volume-type-access:is_public: is_public_volume_type_optional
    - description: description_volume_type_optional
@@ -460,7 +466,7 @@ Show an encryption type
 To show an encryption type for an existing volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -472,8 +478,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
 
 
 Response Parameters
@@ -508,7 +514,7 @@ Show encryption specs item
 To show encryption specs item for an existing volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -539,7 +545,7 @@ Delete an encryption type
 To delete an encryption type for an existing volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -551,8 +557,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
    - encryption_id: encryption_id
 
 
@@ -564,7 +570,7 @@ Create an encryption type
 To create an encryption type for an existing volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -576,8 +582,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
    - encryption: encryption
    - key_size: key_size
    - provider: provider
@@ -619,7 +625,7 @@ Update an encryption type
 To update an encryption type for an existing volume type.
 
 Response codes
-~~~~~~~~~~~~~~
+--------------
 
 .. rest_status_code:: success ../status.yaml
 
@@ -631,8 +637,8 @@ Request
 
 .. rest_parameters:: parameters.yaml
 
-   - volume_type_id: volume_type_id
    - project_id: project_id_path
+   - volume_type_id: volume_type_id
    - encryption_id: encryption_id
    - encryption: encryption
    - key_size: key_size

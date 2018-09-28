@@ -24,6 +24,7 @@ from cinder.api import validation
 from cinder import exception
 from cinder.i18n import _
 from cinder import objects
+from cinder.objects import fields
 from cinder.policies import attachments as attachment_policy
 from cinder import utils
 from cinder.volume import api as volume_api
@@ -163,14 +164,23 @@ class AttachmentsController(wsgi.Controller):
         volume_ref = objects.Volume.get_by_id(
             context,
             volume_uuid)
-        connector = body['attachment'].get('connector', None)
+        args = {'connector': body['attachment'].get('connector', None)}
+
+        if req.api_version_request.matches(mv.ATTACHMENT_CREATE_MODE_ARG):
+            # We check for attach_mode here and default to `null`
+            # if nothing's provided.  This seems odd to not just
+            # set `rw`, BUT we want to keep compatability with
+            # setting the mode via the connector for now, so we
+            # use `null` as an identifier to distinguish that case
+            args['attach_mode'] = body['attachment'].get('mode', 'null')
+
         err_msg = None
         try:
             attachment_ref = (
                 self.volume_api.attachment_create(context,
                                                   volume_ref,
                                                   instance_uuid,
-                                                  connector=connector))
+                                                  **args))
         except (exception.NotAuthorized,
                 exception.InvalidVolume):
             raise
@@ -271,7 +281,8 @@ class AttachmentsController(wsgi.Controller):
             attachment_ref.volume_id)
         context.authorize(attachment_policy.COMPLETE_POLICY,
                           target_obj=attachment_ref)
-        attachment_ref.update({'attach_status': 'attached'})
+        attachment_ref.update(
+            {'attach_status': fields.VolumeAttachStatus.ATTACHED})
         attachment_ref.save()
         volume_ref.update({'status': 'in-use', 'attach_status': 'attached'})
         volume_ref.save()

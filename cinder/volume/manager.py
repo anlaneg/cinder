@@ -486,7 +486,8 @@ class VolumeManager(manager.CleanableManager,
 
         # Migrate any ConfKeyManager keys based on fixed_key to the currently
         # configured key manager.
-        self._add_to_threadpool(key_migration.migrate_fixed_key, volumes)
+        self._add_to_threadpool(key_migration.migrate_fixed_key,
+                                volumes=volumes)
 
         # collect and publish service capabilities
         self.publish_service_capabilities(ctxt)
@@ -522,14 +523,23 @@ class VolumeManager(manager.CleanableManager,
             with excutils.save_and_reraise_exception():
                 LOG.error("Service not found for updating replication_status.")
 
-        if service.replication_status != (
-                fields.ReplicationStatus.FAILED_OVER):
+        if service.replication_status != fields.ReplicationStatus.FAILED_OVER:
             if stats and stats.get('replication_enabled', False):
-                service.replication_status = fields.ReplicationStatus.ENABLED
+                replication_status = fields.ReplicationStatus.ENABLED
             else:
-                service.replication_status = fields.ReplicationStatus.DISABLED
+                replication_status = fields.ReplicationStatus.DISABLED
 
-        service.save()
+            if replication_status != service.replication_status:
+                service.replication_status = replication_status
+                service.save()
+
+        # Update the cluster replication status if necessary
+        cluster = service.cluster
+        if (cluster and
+                cluster.replication_status != service.replication_status):
+            cluster.replication_status = service.replication_status
+            cluster.save()
+
         LOG.info("Driver post RPC initialization completed successfully.",
                  resource={'type': 'driver',
                            'id': self.driver.__class__.__name__})
@@ -753,11 +763,12 @@ class VolumeManager(manager.CleanableManager,
 
         # To backup a snapshot or a 'in-use' volume, create a temp volume
         # from the snapshot or in-use volume, and back it up.
-        # Get admin_metadata to detect temporary volume.
+        # Get admin_metadata (needs admin context) to detect temporary volume.
         is_temp_vol = False
-        if volume.admin_metadata.get('temporary', 'False') == 'True':
-            is_temp_vol = True
-            LOG.info("Trying to delete temp volume: %s", volume.id)
+        with volume.obj_as_admin():
+            if volume.admin_metadata.get('temporary', 'False') == 'True':
+                is_temp_vol = True
+                LOG.info("Trying to delete temp volume: %s", volume.id)
 
         # The status 'deleting' is not included, because it only applies to
         # the source volume to be deleted after a migration. No quota
@@ -1008,7 +1019,7 @@ class VolumeManager(manager.CleanableManager,
             msg = _("Revert finished, but failed to reset "
                     "volume %(id)s status to %(status)s, "
                     "please manually reset it.") % msg_args
-            raise exception.BadResetResourceStatus(message=msg)
+            raise exception.BadResetResourceStatus(reason=msg)
 
         s_res = snapshot.update_single_status_where(
             fields.SnapshotStatus.AVAILABLE,
@@ -1020,7 +1031,7 @@ class VolumeManager(manager.CleanableManager,
             msg = _("Revert finished, but failed to reset "
                     "snapshot %(id)s status to %(status)s, "
                     "please manually reset it.") % msg_args
-            raise exception.BadResetResourceStatus(message=msg)
+            raise exception.BadResetResourceStatus(reason=msg)
         if backup_snapshot:
             self.delete_snapshot(context,
                                  backup_snapshot, handle_quota=False)
@@ -1081,6 +1092,10 @@ class VolumeManager(manager.CleanableManager,
 
         snapshot.status = fields.SnapshotStatus.AVAILABLE
         snapshot.progress = '100%'
+        # Resync with the volume's DB value. This addresses the case where
+        # the snapshot creation was in flight just prior to when the volume's
+        # fixed_key encryption key ID was migrated to Barbican.
+        snapshot.encryption_key_id = vol_ref.encryption_key_id
         snapshot.save()
 
         self._notify_about_snapshot_usage(context, snapshot, "create.end")
@@ -1356,6 +1371,16 @@ class VolumeManager(manager.CleanableManager,
         This assumes that the image has already been downloaded and stored
         in the volume described by the volume_ref.
         """
+        cache_entry = self.image_volume_cache.get_entry(ctx,
+                                                        volume_ref,
+                                                        image_id,
+                                                        image_meta)
+        if cache_entry:
+            LOG.debug('Cache entry already exists with image ID %'
+                      '(image_id)s',
+                      {'image_id': image_id})
+            return
+
         image_volume = None
         try:
             if not self.image_volume_cache.ensure_space(ctx, volume_ref):
@@ -1374,7 +1399,6 @@ class VolumeManager(manager.CleanableManager,
                             '%(image_id)s will not create cache entry.',
                             {'image_id': image_id})
                 return
-
             self.image_volume_cache.create_cache_entry(
                 ctx,
                 image_volume,
@@ -1588,8 +1612,11 @@ class VolumeManager(manager.CleanableManager,
 
                 for option in tune_opts:
                     option_per_gb = '%s_per_gb' % option
+                    option_per_gb_min = '%s_per_gb_min' % option
                     if option_per_gb in specs:
-                        specs[option] = int(specs[option_per_gb]) * volume_size
+                        minimum_value = specs.pop(option_per_gb_min, 0)
+                        value = int(specs[option_per_gb]) * volume_size
+                        specs[option] = max(minimum_value, value)
                         specs.pop(option_per_gb)
 
         qos_spec = dict(qos_specs=specs)
@@ -1839,7 +1866,8 @@ class VolumeManager(manager.CleanableManager,
         LOG.info("Remove snapshot export completed successfully.",
                  resource=snapshot)
 
-    def accept_transfer(self, context, volume_id, new_user, new_project):
+    def accept_transfer(self, context, volume_id, new_user, new_project,
+                        no_snapshots=False):
         # NOTE(flaper87): Verify the driver is enabled
         # before going forward. The exception will be caught
         # and the volume status updated.
@@ -2542,7 +2570,7 @@ class VolumeManager(manager.CleanableManager,
             extra_usage_info=extra_usage_info, host=self.host)
 
         if not volumes:
-            volumes = self.db.volume_get_all_by_generic_group(
+            volumes = objects.VolumeList.get_all_by_generic_group(
                 context, group.id)
         if volumes:
             for volume in volumes:
@@ -2591,6 +2619,11 @@ class VolumeManager(manager.CleanableManager,
         except Exception:
             LOG.exception("Extend volume failed.",
                           resource=volume)
+            self.message_api.create(
+                context,
+                message_field.Action.EXTEND_VOLUME,
+                resource_uuid=volume.id,
+                detail=message_field.Detail.DRIVER_FAILED_EXTEND)
             try:
                 self.db.volume_update(context, volume.id,
                                       {'status': 'error_extending'})
@@ -4358,29 +4391,22 @@ class VolumeManager(manager.CleanableManager,
         self._notify_about_volume_usage(context, vref, 'attach.start')
         attachment_ref = objects.VolumeAttachment.get_by_id(context,
                                                             attachment_id)
+
+        # Check to see if a mode parameter was set during attachment-create;
+        # this seems kinda wonky, but it's how we're keeping back compatability
+        # with the use of connector.mode for now.  In other words, we're
+        # making sure we still honor ro settings from the connector but
+        # we override that if a value was specified in attachment-create
+        if attachment_ref.attach_mode != 'null':
+            mode = attachment_ref.attach_mode
+            connector['mode'] = mode
+
         connection_info = self._connection_create(context,
                                                   vref,
                                                   attachment_ref,
                                                   connector)
-        # FIXME(jdg): get rid of this admin_meta option here, the only thing
-        # it does is enforce that a volume is R/O, that should be done via a
-        # type and not *more* metadata
-        volume_metadata = self.db.volume_admin_metadata_update(
-            context.elevated(),
-            attachment_ref.volume_id,
-            {'attached_mode': mode}, False)
-
-        # The prior seting of mode in the attachment_ref overrides any
-        # settings within the connector when dealing with read only
-        # attachment options
-        if mode != 'ro' and attachment_ref.attach_mode == 'ro':
-            connector['mode'] = 'ro'
-            mode = 'ro'
 
         try:
-            if volume_metadata.get('readonly') == 'True' and mode != 'ro':
-                raise exception.InvalidVolumeAttachMode(mode=mode,
-                                                        volume_id=vref.id)
             utils.require_driver_initialized(self.driver)
             self.driver.attach_volume(context,
                                       vref,
@@ -4494,7 +4520,7 @@ class VolumeManager(manager.CleanableManager,
             # TODO(jdg): object method here
             self.db.volume_attachment_update(
                 context, attachment.get('id'),
-                {'attach_status': 'error_detaching'})
+                {'attach_status': fields.VolumeAttachStatus.ERROR_DETACHING})
         else:
             self.db.volume_detached(context.elevated(), vref.id,
                                     attachment.get('id'))
