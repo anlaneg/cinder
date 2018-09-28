@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#encoding:utf-8
 # Copyright (c) 2011 X.commerce, a business unit of eBay Inc.
 # Copyright 2010 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
@@ -768,6 +769,7 @@ def methods_of(obj):
     """
     result = []
     for i in dir(obj):
+        #如果存在i函数，且函数名不能'_'开头，则加入到result中
         if isinstance(getattr(obj, i),
                       collections.Callable) and not i.startswith('_'):
             result.append((i, getattr(obj, i)))
@@ -783,6 +785,7 @@ def add_command_parsers(subparsers):
 
         category_subparsers = parser.add_subparsers(dest='action')
 
+        #提取command_object中的函数名及函数指针
         for (action, action_fn) in methods_of(command_object):
             parser = category_subparsers.add_parser(action)
 
@@ -834,9 +837,11 @@ def main():
     CONF.register_cli_opt(category_opt)
     script_name = sys.argv[0]
     if len(sys.argv) < 2:
+        #参数值<2,报错
         print(_("\nOpenStack Cinder version: %(version)s\n") %
               {'version': version.version_string()})
         print(script_name + " category action [<args>]")
+        #显示有效的category action
         print(_("Available categories:"))
         for category in CATEGORIES:
             print(_("\t%s") % category)
@@ -855,6 +860,11 @@ def main():
         print(_("Failed to read configuration file(s): %s") % cfg_files)
         sys.exit(2)
 
+    #取action对应的action_fn
     fn = CONF.category.action_fn
     fn_kwargs = fetch_func_args(fn)
+    #调用对应的action function
     fn(**fn_kwargs)
+
+#if __name__ == "__main__":
+#    main()
