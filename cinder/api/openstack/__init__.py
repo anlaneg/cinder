@@ -30,10 +30,13 @@ LOG = logging.getLogger(__name__)
 
 
 class APIMapper(routes.Mapper):
+    #通过此函数，产生url的映射结果
     def routematch(self, url=None, environ=None):
         if url is "":
+            #通过self._match处理url为空串的情况
             result = self._match("", environ)
             return result[0], result[1]
+        #其它情况由底层routemaatch解决
         return routes.Mapper.routematch(self, url, environ)
 
     def connect(self, *args, **kwargs):
@@ -78,11 +81,14 @@ class APIRouter(base_wsgi.Router):
             else:
                 raise Exception(_("Must specify an ExtensionManager class"))
 
+        #创建时使用默认参数
         mapper = ProjectMapper()
         self.resources = {}
+        #加载route信息
         self._setup_routes(mapper, ext_mgr)
         self._setup_ext_routes(mapper, ext_mgr)
         self._setup_extensions(ext_mgr)
+        #将projectMapper作用mapper注入，url将采用mapper.routematch进行路径匹配
         super(APIRouter, self).__init__(mapper)
 
     def _setup_ext_routes(self, mapper, ext_mgr):
@@ -126,5 +132,6 @@ class APIRouter(base_wsgi.Router):
             resource.register_actions(controller)
             resource.register_extensions(controller)
 
+    #需要上层overwirte
     def _setup_routes(self, mapper, ext_mgr):
         raise NotImplementedError

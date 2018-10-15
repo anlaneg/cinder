@@ -26,5 +26,6 @@ CONF = config.CONF
 
 
 def API(*args, **kwargs):
+    #加载配置的volume api
     class_name = CONF.volume_api_class
     return importutils.import_object(class_name, *args, **kwargs)

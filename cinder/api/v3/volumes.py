@@ -259,6 +259,7 @@ class VolumeController(volumes_v2.VolumeController):
         kwargs = {}
         self.validate_name_and_description(volume, check_length=False)
 
+        #参数替代
         # NOTE(thingee): v2 API allows name instead of display_name
         if 'name' in volume:
             volume['display_name'] = volume.pop('name')
@@ -346,6 +347,7 @@ class VolumeController(volumes_v2.VolumeController):
                    "be to specify multiattach enabled volume types.")
             versionutils.report_deprecated_feature(LOG, msg)
 
+        #创建新的volume
         new_volume = self.volume_api.create(context,
                                             size,
                                             volume.get('display_name'),

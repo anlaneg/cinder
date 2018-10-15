@@ -3967,6 +3967,7 @@ def _group_type_ref_get(context, id, session=None, inactive=False):
 
 @require_context
 def _volume_type_get_by_name(context, name, session=None):
+    #查询表volume_types，中指定name
     result = model_query(context, models.VolumeType, session=session).\
         options(joinedload('extra_specs')).\
         filter_by(name=name).\

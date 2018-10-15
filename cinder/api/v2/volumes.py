@@ -51,6 +51,7 @@ class VolumeController(wsgi.Controller):
     _view_builder_class = volume_views.ViewBuilder
 
     def __init__(self, ext_mgr):
+        #加载对应的volume_api
         self.volume_api = cinder_volume.API()
         self.group_api = group_api.API()
         self.ext_mgr = ext_mgr

@@ -48,6 +48,7 @@ class APIRouter(cinder.api.openstack.APIRouter):
     """Routes requests on the API to the appropriate controller and method."""
     ExtensionManager = extensions.ExtensionManager
 
+    #由cinder.api.openstack.APIRouter初始化时主动调起，用于加载对应的routes信息
     def _setup_routes(self, mapper, ext_mgr):
         self.resources['versions'] = versions.create_resource()
         mapper.connect("versions", "/",
@@ -56,7 +57,9 @@ class APIRouter(cinder.api.openstack.APIRouter):
 
         mapper.redirect("", "/")
 
+        #记录资源对应的对象
         self.resources['volumes'] = volumes.create_resource(ext_mgr)
+        #实现api与资源的映射
         mapper.resource("volume", "volumes",
                         controller=self.resources['volumes'],
                         collection={'detail': 'GET', 'summary': 'GET'},

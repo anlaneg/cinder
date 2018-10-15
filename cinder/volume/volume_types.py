@@ -133,6 +133,7 @@ def get_volume_type(ctxt, id, expected_fields=None):
 def get_by_name_or_id(context, identity):
     """Retrieves volume type by id or name"""
     if uuidutils.is_uuid_like(identity):
+        #通过uuid获取volume类型
         # both name and id can be in uuid format
         try:
             return get_volume_type(context, identity)
@@ -143,6 +144,7 @@ def get_by_name_or_id(context, identity):
                 return get_volume_type_by_name(context, identity)
             except exception.VolumeTypeNotFoundByName:
                 raise exception.VolumeTypeNotFound(volume_type_id=identity)
+    #通过名称获取volume类型
     return get_volume_type_by_name(context, identity)
 
 
