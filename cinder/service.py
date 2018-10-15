@@ -519,6 +519,7 @@ class WSGIService(service.ServiceBase):
                                   port=self.port,
                                   use_ssl=self.use_ssl)
 
+    #构造指定manager对应的对象
     def _get_manager(self):
         """Initialize a Manager object appropriate for this service.
 

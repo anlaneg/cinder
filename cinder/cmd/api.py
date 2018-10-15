@@ -43,7 +43,7 @@ from cinder import version
 
 CONF = cfg.CONF
 
-
+#cinder api进程入口
 def main():
     objects.register_all()
     gmr_opts.set_defaults(CONF)
