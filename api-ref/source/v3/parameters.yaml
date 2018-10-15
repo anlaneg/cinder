@@ -243,6 +243,13 @@ image-id:
   in: query
   required: false
   type: string
+is_public_volume_type_query:
+  description: |
+    Filter the volume type by public visibility.
+    See :ref:`valid boolean values <valid-boolean-values>`.
+  in: query
+  required: false
+  type: boolean
 limit:
   description: |
     Requests a page size of items. Returns a number
@@ -529,6 +536,12 @@ backend_id_target:
   in: body
   required: true
   type: string
+backend_state:
+  description: |
+    The state of storage backend. Only in ``cinder-volume`` service.
+  in: body
+  required: false
+  type: string
 backup:
   description: |
     A ``backup`` object.
@@ -634,7 +647,7 @@ capabilities:
   description: |
     The capabilities for the back end.  The value is
     either ``null`` or a string value that indicates the capabilities
-    for each pool. For example, ``total_capacity`` or ``QoS_support``.
+    for each pool. For example, ``total_capacity_gb`` or ``QoS_support``.
   in: body
   required: true
   type: object
@@ -1190,6 +1203,12 @@ group_snapshot_id_1:
     The ID of the group snapshot.
   in: body
   required: true
+  type: string
+group_snapshot_id_2:
+  description: |
+    The ID of the group snapshot.
+  in: body
+  required: false
   type: string
 group_snapshots:
   description: |
@@ -1946,7 +1965,7 @@ namespace:
   description: |
     Link associated to the extension.
   in: body
-  required: true
+  required: false
   type: string
 namespace_1:
   description: |
@@ -2523,7 +2542,7 @@ service_state_1:
   type: string
 service_status:
   description: |
-    The status of the service. One of ``available`` or ``unavailable``.
+    The status of the service. One of ``enabled`` or ``disabled``.
   in: body
   required: true
   type: string
@@ -2646,6 +2665,12 @@ source_group_id:
   in: body
   required: true
   type: string
+source_group_id_2:
+  description: |
+    The UUID of the source group.
+  in: body
+  required: false
+  type: string
 source_reference:
   description: |
     The snapshot's origin volume information.
@@ -2767,7 +2792,7 @@ total_count:
     Total number of volumes.
   in: body
   required: true
-  type: integer
+  type: string
 total_size:
   description: |
     Total size of volumes in GB.
@@ -2792,12 +2817,18 @@ totalGigabytesUsed:
   in: body
   required: true
   type: integer
+totalSnapGigabytesUsed:
+  description: |
+    The total number of gibibytes (GiB) used by snapshots.
+  in: body
+  required: true
+  type: string
 totalSnapshotsUsed:
   description: |
     The total number of snapshots used.
   in: body
   required: true
-  type: integer
+  type: string
 totalVolumesUsed:
   description: |
     The total number of volumes used.
@@ -3045,7 +3076,7 @@ volume_type_1:
   type: object
 volume_type_2:
   description: |
-    The volume type. To create an environment with
+    The volume type (either name or ID). To create an environment with
     multiple-storage back ends, you must specify a volume type. Block
     Storage volume back ends are spawned as children to ``cinder-
     volume``, and they are keyed from a unique queue. They are named

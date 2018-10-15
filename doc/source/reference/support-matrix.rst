@@ -66,4 +66,6 @@ release.
 * Rocky
    * CoprHD Storage Driver (FC, iSCSI, ScaleIO)
 
-
+* Stein
+   * HGST Flash Storage Suite Driver (vgc)
+   * ITRI DISCO Driver

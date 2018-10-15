@@ -88,6 +88,9 @@ class TintriDriver(driver.ManageableVD,
     # ThirdPartySystems wiki page
     CI_WIKI_NAME = "Tintri_CI"
 
+    # TODO(jsbryant) Remove driver in the 'T' release if CI is not fixed
+    SUPPORTED = False
+
     REQUIRED_OPTIONS = ['tintri_server_hostname', 'tintri_server_username',
                         'tintri_server_password']
 
@@ -800,7 +803,7 @@ class TintriDriver(driver.ManageableVD,
         mounted_image_shares = []
         if self._image_shares_config:
             self._load_shares_config(self._image_shares_config)
-            for share in self.shares.keys():
+            for share in self.shares:
                 try:
                     self._ensure_share_mounted(share)
                     mounted_image_shares.append(share)

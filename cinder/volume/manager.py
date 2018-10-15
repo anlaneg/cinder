@@ -2687,8 +2687,10 @@ class VolumeManager(manager.CleanableManager,
                 volume.update(status_update)
                 volume.save()
             finally:
-                QUOTAS.rollback(context, old_reservations)
-                QUOTAS.rollback(context, new_reservations)
+                if old_reservations:
+                    QUOTAS.rollback(context, old_reservations)
+                if new_reservations:
+                    QUOTAS.rollback(context, new_reservations)
 
         status_update = {'status': volume.previous_status}
         if context.project_id != volume.project_id:
@@ -3539,7 +3541,7 @@ class VolumeManager(manager.CleanableManager,
                 LOG.error("Update group "
                           "failed to %(op)s volume-%(volume_id)s: "
                           "VolumeNotFound.",
-                          {'volume_id': add_vol_ref.id,
+                          {'volume_id': add_vol,
                            'op': 'add' if add else 'remove'},
                           resource={'type': 'group',
                                     'id': group.id})

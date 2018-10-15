@@ -324,6 +324,12 @@ backups:
   in: body
   required: true
   type: array
+backups_number:
+  description: |
+    The number of backups that are allowed for each project.
+  in: body
+  required: true
+  type: integer
 bootable:
   description: |
     Enables or disables the bootable attribute. You
@@ -342,7 +348,7 @@ capabilities:
   description: |
     The capabilities for the back end.  The value is
     either ``null`` or a string value that indicates the capabilities
-    for each pool. For example, ``total_capacity`` or ``QoS_support``.
+    for each pool. For example, ``total_capacity_gb`` or ``QoS_support``.
   in: body
   required: true
   type: object
@@ -630,6 +636,25 @@ free_capacity:
   in: body
   required: true
   type: string
+gigabytes:
+  description: |
+    The size (GB) of volumes and snapshots that are allowed for each project.
+  in: body
+  required: true
+  type: integer
+gigabytes_for_type:
+  description: |
+    The size (GB) of volumes and snapshots that are allowed for each project
+    and the specified volume type.
+  in: body
+  required: true
+  type: integer
+groups_number:
+  description: |
+    The number of groups that are allowed for each project.
+  in: body
+  required: true
+  type: integer
 has_dependent_backups:
   description: |
     If this value is ``true``, there are other backups depending on
@@ -1521,6 +1546,19 @@ snapshot_id_2:
   in: body
   required: false
   type: string
+snapshots_number:
+  description: |
+    The number of snapshots that are allowed for each project.
+  in: body
+  required: true
+  type: integer
+snapshots_number_for_type:
+  description: |
+    The number of snapshots that are allowed for each project and
+    the specified volume type.
+  in: body
+  required: true
+  type: integer
 source_cgid:
   description: |
     The UUID of the source consistency group.
@@ -1780,7 +1818,7 @@ volume_type_1:
   type: object
 volume_type_2:
   description: |
-    The volume type. To create an environment with
+    The volume type (either name or ID). To create an environment with
     multiple-storage back ends, you must specify a volume type. Block
     Storage volume back ends are spawned as children to ``cinder-
     volume``, and they are keyed from a unique queue. They are named
@@ -1854,3 +1892,16 @@ volumes:
   in: body
   required: true
   type: array
+volumes_number:
+  description: |
+    The number of volumes that are allowed for each project.
+  in: body
+  required: true
+  type: integer
+volumes_number_for_type:
+  description: |
+    The number of volumes that are allowed for each project and
+    the specified volume type.
+  in: body
+  required: true
+  type: integer
